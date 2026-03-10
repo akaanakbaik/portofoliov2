@@ -31,7 +31,11 @@ export default function HomeSection() {
   }, [displayText, isDeleting, statusIndex, statuses]);
 
   return (
-    <section id="home" className="min-h-screen flex items-center justify-center relative overflow-hidden pt-14">
+    <section
+      id="home"
+      className="flex items-center justify-center relative overflow-hidden"
+      style={{ minHeight: "calc(100vh - 3.5rem)", marginTop: "3.5rem" }}
+    >
       <div className="absolute inset-0 pointer-events-none" aria-hidden>
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] }}
@@ -47,7 +51,7 @@ export default function HomeSection() {
         />
       </div>
 
-      <div className="relative z-10 text-center px-4 max-w-md mx-auto">
+      <div className="relative z-10 text-center px-4 max-w-md mx-auto py-8">
         <motion.div
           initial={{ opacity: 0, scale: 0.7, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -105,7 +109,7 @@ export default function HomeSection() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 1 }}
-          className="mt-12"
+          className="mt-8"
         >
           <motion.div
             animate={{ y: [0, 8, 0] }}
