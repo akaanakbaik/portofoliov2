@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+.env
+.env.local
+.env.production
+.env.development
+server/public/
+vite.config.ts.*
+*.tar.gz
+*.log
+.replit
+replit.nix
+.cache/
+.local/
+attached_assets/
+generated-icon.png
