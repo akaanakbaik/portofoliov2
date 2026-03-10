@@ -8,7 +8,7 @@ import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
 
 const ADMIN_PASSWORD = "AKA ANAK BAIK";
-const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio"] as const;
+const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
 interface VisitorStats {
@@ -32,6 +32,7 @@ const TAB_CONFIG: { key: Tab; icon: string; label: string }[] = [
   { key: "friends", icon: "👥", label: "Teman" },
   { key: "social", icon: "🔗", label: "Medsos" },
   { key: "audio", icon: "🎵", label: "Audio" },
+  { key: "settings", icon: "⚙️", label: "Pengaturan" },
 ];
 
 async function autoTranslate(text: string): Promise<string | null> {
@@ -83,7 +84,7 @@ function TranslateBtn({ onClick, loading }: { onClick: () => void; loading: bool
 
 export default function Admin() {
   const [, navigate] = useLocation();
-  const { settings, updateSettings } = usePortfolio();
+  const { settings, updateSettings, resetSettings } = usePortfolio();
   const { t } = useLang();
   const { toast } = useToast();
 
@@ -287,6 +288,7 @@ export default function Admin() {
             {activeTab === "friends" && <FriendsTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "social" && <SocialTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "audio" && <AudioTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
+            {activeTab === "settings" && <SettingsTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} onReset={resetSettings} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -776,6 +778,184 @@ function SocialTab({ draft, setDraft, onSave, onCancel }: any) {
         <SaveBar onSave={onSave} onCancel={onCancel} />
       </div>
     </Card>
+  );
+}
+
+function SettingsTab({ draft, setDraft, onSave, onCancel, onReset }: any) {
+  const { toast } = useToast();
+  const [clock, setClock] = useState(new Date());
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleReset = () => {
+    if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
+    onReset();
+    setConfirmReset(false);
+    toast({ title: "Reset berhasil ✓", description: "Semua pengaturan dikembalikan ke default" });
+  };
+
+  const exportSettings = () => {
+    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "aka-settings.json"; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Diekspor ✓" });
+  };
+
+  const importSettings = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        setDraft((d: any) => ({ ...d, ...parsed }));
+        toast({ title: "Diimpor ✓", description: "Review lalu simpan" });
+      } catch { toast({ title: "File tidak valid", variant: "destructive" }); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const sectionLabels: Record<string, string> = {
+    about: "👤 Tentang",
+    timeline: "📅 Pendidikan",
+    stack: "💻 Tech Stack",
+    projects: "💼 Proyek",
+    friends: "👥 Teman",
+    social: "🔗 Sosial Media",
+    contact: "✉️ Kontak"
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl p-4 flex items-center justify-between" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
+        <div>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Waktu Sekarang</p>
+          <p className="text-2xl font-bold text-foreground tabular-nums">{clock.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+          <p className="text-[11px] text-muted-foreground">{clock.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <a href="/" target="_blank" rel="noopener" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Lihat Situs
+          </a>
+          <button onClick={() => { navigator.clipboard.writeText(window.location.origin); toast({ title: "URL disalin ✓" }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Salin URL
+          </button>
+        </div>
+      </div>
+
+      <Card title="👁️ Visibilitas Seksi" subtitle="Tampilkan/sembunyikan seksi di portfolio">
+        <div className="space-y-2.5">
+          {Object.entries(sectionLabels).map(([key, label]) => {
+            const isVisible = draft.sectionVisibility?.[key] !== false;
+            return (
+              <div key={key} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                <span className="text-sm text-foreground">{label}</span>
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  data-testid={`visibility-${key}`}
+                  onClick={() => setDraft((d: any) => ({ ...d, sectionVisibility: { ...d.sectionVisibility, [key]: !isVisible } }))}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  style={{
+                    background: isVisible ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
+                    color: isVisible ? "#22c55e" : "#ef4444",
+                    border: `1px solid ${isVisible ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`
+                  }}
+                >
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: isVisible ? "#22c55e" : "#ef4444" }} />
+                  {isVisible ? "Tampil" : "Sembunyikan"}
+                </motion.button>
+              </div>
+            );
+          })}
+        </div>
+        <SaveBar onSave={onSave} onCancel={onCancel} />
+      </Card>
+
+      <Card title="🏫 Editor Pendidikan (Timeline)" subtitle="Edit nama sekolah dan tahun">
+        <div className="space-y-3">
+          {([
+            { key: "sd", icon: "📚", label: "SD (Sekolah Dasar)" },
+            { key: "mts", icon: "📖", label: "MTs / SMP" },
+            { key: "sma", icon: "🎓", label: "SMA / SMK" }
+          ] as const).map(({ key, icon, label }) => (
+            <div key={key} className="p-3.5 rounded-xl bg-accent/30 border border-border/50 space-y-2">
+              <p className="text-xs font-bold text-foreground/70">{icon} {label}</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Field label="Nama Sekolah">
+                  <input
+                    value={draft.timeline?.[key]?.name || ""}
+                    onChange={e => setDraft((d: any) => ({ ...d, timeline: { ...d.timeline, [key]: { ...d.timeline?.[key], name: e.target.value } } }))}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Tahun">
+                  <input
+                    value={draft.timeline?.[key]?.year || ""}
+                    onChange={e => setDraft((d: any) => ({ ...d, timeline: { ...d.timeline, [key]: { ...d.timeline?.[key], year: e.target.value } } }))}
+                    className={inputCls}
+                    placeholder="2020 - 2023"
+                  />
+                </Field>
+              </div>
+            </div>
+          ))}
+        </div>
+        <SaveBar onSave={onSave} onCancel={onCancel} />
+      </Card>
+
+      <Card title="🔍 SEO & Meta" subtitle="Judul halaman dan deskripsi">
+        <div className="space-y-3">
+          <Field label="Judul Halaman">
+            <input value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
+          </Field>
+          <Field label="Deskripsi Meta">
+            <textarea rows={2} value={draft.seo?.description || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className={inputCls + " resize-none"} placeholder="Deskripsi singkat portfolio..." />
+          </Field>
+          <Field label="Teks Footer">
+            <input value={draft.footerText || ""} onChange={e => setDraft((d: any) => ({ ...d, footerText: e.target.value }))} className={inputCls} placeholder="© 2026 Aka" />
+          </Field>
+        </div>
+        <SaveBar onSave={onSave} onCancel={onCancel} />
+      </Card>
+
+      <Card title="📦 Ekspor / Impor Pengaturan" subtitle="Backup atau restore semua pengaturan">
+        <div className="flex flex-wrap gap-2">
+          <motion.button whileTap={{ scale: 0.95 }} onClick={exportSettings} className="px-4 py-2.5 rounded-xl text-xs font-bold" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "white" }}>
+            ↓ Ekspor JSON
+          </motion.button>
+          <label className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+            ↑ Impor JSON
+            <input type="file" accept=".json" onChange={importSettings} className="hidden" />
+          </label>
+        </div>
+      </Card>
+
+      <Card title="🔁 Reset Pengaturan" subtitle="Kembalikan semua ke nilai default">
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Semua perubahan yang kamu buat akan hilang dan kembali ke pengaturan bawaan. Tindakan ini tidak dapat dibatalkan.</p>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={handleReset}
+            data-testid="admin-reset"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
+            style={{
+              background: confirmReset ? "hsl(var(--destructive))" : "hsl(var(--destructive)/0.1)",
+              color: confirmReset ? "white" : "hsl(var(--destructive))",
+              border: "1px solid hsl(var(--destructive)/0.3)"
+            }}
+          >
+            {confirmReset ? "⚠️ Klik lagi untuk konfirmasi reset" : "Reset ke Default"}
+          </motion.button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
