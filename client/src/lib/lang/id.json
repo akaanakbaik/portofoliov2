@@ -1,0 +1,99 @@
+{
+  "nav": {
+    "home": "Beranda",
+    "about": "Tentang",
+    "timeline": "Riwayat",
+    "projects": "Proyek",
+    "friends": "Teman",
+    "contact": "Kontak"
+  },
+  "home": {
+    "status": ["Murid", "Developer", "Pemula"]
+  },
+  "about": {
+    "title": "Tentang Saya",
+    "age": "Umur",
+    "ageValue": "16 Tahun",
+    "origin": "Asal",
+    "originValue": "Sumatera Barat, Indonesia",
+    "school": "Sekolah",
+    "schoolValue": "SMAN 1 Lembah Melintang",
+    "descTitle": "Hai!",
+    "desc": "Hai semua, nama ku Aka. Saya tinggal di Sumatra Barat, Indonesia. Saya kelas 10 sekarang dan berumur 16 tahun. Saya suka hal-hal berbau teknologi, pengetahuan alam, pemrograman dan sebagainya. Saya haus akan keingintahuan akan ilmu dan pengalaman. Terima kasih :)"
+  },
+  "timeline": {
+    "title": "Riwayat Pendidikan",
+    "sd": "SD",
+    "mts": "MTS",
+    "sma": "SMA",
+    "sdName": "SDN 13 Lembah Melintang",
+    "mtsName": "MTsN 2 Pasaman Barat",
+    "smaName": "SMAN 1 Lembah Melintang",
+    "sdYear": "2016 - 2022",
+    "mtsYear": "2022 - 2025",
+    "smaYear": "2025 - Sekarang",
+    "education": "Pendidikan"
+  },
+  "stack": {
+    "title": "Tech Stack",
+    "subtitle": "Karena saya suka sedikit pemrograman, jadi saya punya stack yang cukup saya ketahui — bukan ahli.",
+    "programming": "Pemrograman",
+    "framework": "Framework",
+    "tools": "Tools"
+  },
+  "projects": {
+    "title": "Proyek Saya",
+    "view": "Lihat",
+    "joinGroup": "Gabung Grup"
+  },
+  "friends": {
+    "title": "Teman-Teman",
+    "subtitle": "Teman-teman saya yang membantu saya dalam dunia teknologi dan pemrograman"
+  },
+  "social": {
+    "title": "Media Sosial",
+    "subtitle": "Temukan saya di berbagai platform"
+  },
+  "contact": {
+    "title": "Kontak",
+    "subtitle": "Kirimkan saya pesan, saran, atau laporan",
+    "name": "Nama",
+    "namePlaceholder": "Nama kamu",
+    "email": "Email",
+    "emailPlaceholder": "email@contoh.com",
+    "message": "Pesan",
+    "messagePlaceholder": "Tulis pesanmu di sini...",
+    "send": "Kirim Pesan",
+    "sending": "Mengirim...",
+    "successTitle": "Pesan Terkirim!",
+    "successDesc": "Terima kasih atas pesanmu. Saya akan segera membalasnya.",
+    "errorTitle": "Gagal Mengirim",
+    "errorDesc": "Terjadi kesalahan saat mengirim pesan. Silakan coba lagi."
+  },
+  "footer": {
+    "built": "Dibuat dengan ❤️ dan kode"
+  },
+  "admin": {
+    "password": "Kata Sandi",
+    "passwordPlaceholder": "Masukkan kata sandi rahasia",
+    "login": "Masuk",
+    "loginLoading": "Memverifikasi...",
+    "wrongPassword": "Kata sandi salah!",
+    "analytics": "Analitik",
+    "visitors": "Pengunjung",
+    "totalVisits": "Total Kunjungan",
+    "todayVisits": "Kunjungan Hari Ini",
+    "langStats": "Statistik Bahasa",
+    "settings": "Pengaturan",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "saved": "Tersimpan!",
+    "homeSettings": "Pengaturan Beranda",
+    "aboutSettings": "Pengaturan Tentang",
+    "techSettings": "Pengaturan Tech Stack",
+    "projectSettings": "Pengaturan Proyek",
+    "friendSettings": "Pengaturan Teman",
+    "socialSettings": "Pengaturan Medsos",
+    "audioSettings": "Pengaturan Audio"
+  }
+}
