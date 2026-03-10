@@ -188,9 +188,10 @@ export async function registerRoutes(
 
   app.post("/api/contact", async (req, res) => {
     try {
-      const name = sanitizeInput(String(req.body.name || ""));
-      const email = sanitizeInput(String(req.body.email || ""));
-      const message = sanitizeInput(String(req.body.message || ""));
+      const body = req.body || {};
+      const name = sanitizeInput(String(body.name || ""));
+      const email = sanitizeInput(String(body.email || ""));
+      const message = sanitizeInput(String(body.message || ""));
 
       if (!name || !email || !message) {
         return res.status(400).json({ error: "All fields are required" });
@@ -201,13 +202,28 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid email format" });
       }
 
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        }
-      });
+      const emailUser = process.env.EMAIL_USER;
+      const emailPass = process.env.EMAIL_PASS;
+      const emailRecipient = process.env.EMAIL_RECIPIENT || emailUser;
+
+      if (!emailUser || !emailPass) {
+        console.warn("[contact] EMAIL_USER/EMAIL_PASS not set — skipping send");
+        return res.json({ ok: true, note: "email_not_configured" });
+      }
+
+      let transporter: ReturnType<typeof nodemailer.createTransport>;
+      try {
+        transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: emailUser, pass: emailPass },
+          tls: { rejectUnauthorized: false }
+        });
+      } catch (transportErr) {
+        console.error("[contact] Transport creation failed:", transportErr);
+        return res.status(500).json({ error: "Email service unavailable" });
+      }
+
+      const recipient = emailRecipient;
 
       const htmlContent = `
 <!DOCTYPE html>
@@ -254,8 +270,8 @@ export async function registerRoutes(
 </html>`;
 
       await transporter.sendMail({
-        from: `"Portfolio aka" <${process.env.EMAIL_USER}>`,
-        to: process.env.EMAIL_RECIPIENT,
+        from: `"Portfolio aka" <${emailUser}>`,
+        to: recipient,
         replyTo: email,
         subject: `📩 Pesan Baru dari ${name} — Portfolio aka`,
         html: htmlContent
