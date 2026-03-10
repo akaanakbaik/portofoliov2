@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
+import { usePortfolio } from "@/lib/PortfolioContext";
 
 interface PopupInfo {
   id: string;
@@ -12,6 +13,8 @@ interface PopupInfo {
 
 export default function TimelineSection() {
   const { t } = useLang();
+  const { settings } = usePortfolio();
+  const tl = settings.timeline;
   const [popup, setPopup] = useState<PopupInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -20,9 +23,9 @@ export default function TimelineSection() {
   const lastTouchRef = useRef(0);
 
   const items = [
-    { id: "sd", label: t.timeline.sd, name: t.timeline.sdName, year: t.timeline.sdYear, icon: "📚", color: "from-emerald-400 to-green-500" },
-    { id: "mts", label: t.timeline.mts, name: t.timeline.mtsName, year: t.timeline.mtsYear, icon: "📖", color: "from-blue-400 to-blue-600" },
-    { id: "sma", label: t.timeline.sma, name: t.timeline.smaName, year: t.timeline.smaYear, icon: "🎓", color: "from-violet-400 to-purple-600" }
+    { id: "sd", label: t.timeline.sd, name: tl?.sd?.name || t.timeline.sdName, year: tl?.sd?.year || t.timeline.sdYear, icon: "📚", color: "from-emerald-400 to-green-500" },
+    { id: "mts", label: t.timeline.mts, name: tl?.mts?.name || t.timeline.mtsName, year: tl?.mts?.year || t.timeline.mtsYear, icon: "📖", color: "from-blue-400 to-blue-600" },
+    { id: "sma", label: t.timeline.sma, name: tl?.sma?.name || t.timeline.smaName, year: tl?.sma?.year || t.timeline.smaYear, icon: "🎓", color: "from-violet-400 to-purple-600" }
   ];
 
   const startAutoScroll = useCallback(() => {
