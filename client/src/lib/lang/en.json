@@ -1,0 +1,99 @@
+{
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "timeline": "Timeline",
+    "projects": "Projects",
+    "friends": "Friends",
+    "contact": "Contact"
+  },
+  "home": {
+    "status": ["Student", "Developer", "Beginner"]
+  },
+  "about": {
+    "title": "About Me",
+    "age": "Age",
+    "ageValue": "16 Years Old",
+    "origin": "Origin",
+    "originValue": "West Sumatra, Indonesia",
+    "school": "School",
+    "schoolValue": "SMAN 1 Lembah Melintang",
+    "descTitle": "Hey!",
+    "desc": "Hey everyone, my name is Aka. I live in West Sumatra, Indonesia. I'm in 10th grade now and 16 years old. I love technology, natural science, programming, and so on. I'm thirsty for knowledge and new experiences. Thank you :)"
+  },
+  "timeline": {
+    "title": "Education Timeline",
+    "sd": "Elementary",
+    "mts": "Junior High",
+    "sma": "Senior High",
+    "sdName": "SDN 13 Lembah Melintang",
+    "mtsName": "MTsN 2 Pasaman Barat",
+    "smaName": "SMAN 1 Lembah Melintang",
+    "sdYear": "2016 - 2022",
+    "mtsYear": "2022 - 2025",
+    "smaYear": "2025 - Present",
+    "education": "Education"
+  },
+  "stack": {
+    "title": "Tech Stack",
+    "subtitle": "Since I enjoy programming a bit, I have a stack I'm fairly familiar with — not an expert though.",
+    "programming": "Programming",
+    "framework": "Framework",
+    "tools": "Tools"
+  },
+  "projects": {
+    "title": "My Projects",
+    "view": "View",
+    "joinGroup": "Join Group"
+  },
+  "friends": {
+    "title": "My Friends",
+    "subtitle": "Friends who have helped me in the world of technology and programming"
+  },
+  "social": {
+    "title": "Social Media",
+    "subtitle": "Find me on various platforms"
+  },
+  "contact": {
+    "title": "Contact",
+    "subtitle": "Send me a message, suggestion, or report",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "email": "Email",
+    "emailPlaceholder": "email@example.com",
+    "message": "Message",
+    "messagePlaceholder": "Write your message here...",
+    "send": "Send Message",
+    "sending": "Sending...",
+    "successTitle": "Message Sent!",
+    "successDesc": "Thank you for your message. I'll get back to you soon.",
+    "errorTitle": "Failed to Send",
+    "errorDesc": "An error occurred while sending. Please try again."
+  },
+  "footer": {
+    "built": "Built with ❤️ and code"
+  },
+  "admin": {
+    "password": "Password",
+    "passwordPlaceholder": "Enter secret password",
+    "login": "Login",
+    "loginLoading": "Verifying...",
+    "wrongPassword": "Wrong password!",
+    "analytics": "Analytics",
+    "visitors": "Visitors",
+    "totalVisits": "Total Visits",
+    "todayVisits": "Today's Visits",
+    "langStats": "Language Statistics",
+    "settings": "Settings",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "Saved!",
+    "homeSettings": "Home Settings",
+    "aboutSettings": "About Settings",
+    "techSettings": "Tech Stack Settings",
+    "projectSettings": "Project Settings",
+    "friendSettings": "Friends Settings",
+    "socialSettings": "Social Media Settings",
+    "audioSettings": "Audio Settings"
+  }
+}
