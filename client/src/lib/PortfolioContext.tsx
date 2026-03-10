@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 import { PORTFOLIO_CONFIG } from "./config";
 
 export interface PlaylistItem {
@@ -22,6 +22,11 @@ export interface TechStack {
   tools: string[];
 }
 
+export interface TimelineEntry {
+  name: string;
+  year: string;
+}
+
 export interface PortfolioSettings {
   name: string;
   photoUrl: string;
@@ -35,11 +40,28 @@ export interface PortfolioSettings {
   projects: ProjectItem[];
   social: Record<string, string>;
   playlist: PlaylistItem[];
+  sectionVisibility: {
+    about: boolean;
+    timeline: boolean;
+    stack: boolean;
+    projects: boolean;
+    friends: boolean;
+    social: boolean;
+    contact: boolean;
+  };
+  timeline: {
+    sd: TimelineEntry;
+    mts: TimelineEntry;
+    sma: TimelineEntry;
+  };
+  footerText: string;
+  seo: { title: string; description: string };
 }
 
 interface PortfolioContextType {
   settings: PortfolioSettings;
   updateSettings: (partial: Partial<PortfolioSettings>) => void;
+  resetSettings: () => void;
 }
 
 const defaultSettings: PortfolioSettings = {
@@ -54,19 +76,48 @@ const defaultSettings: PortfolioSettings = {
   techStack: PORTFOLIO_CONFIG.techStack,
   projects: PORTFOLIO_CONFIG.projects,
   social: PORTFOLIO_CONFIG.social,
-  playlist: PORTFOLIO_CONFIG.playlist
+  playlist: PORTFOLIO_CONFIG.playlist,
+  sectionVisibility: {
+    about: true,
+    timeline: true,
+    stack: true,
+    projects: true,
+    friends: true,
+    social: true,
+    contact: true
+  },
+  timeline: {
+    sd: { name: "SDN 13 Lembah Melintang", year: "2016 - 2022" },
+    mts: { name: "MTsN 2 Pasaman Barat", year: "2022 - 2025" },
+    sma: { name: "SMAN 1 Lembah Melintang", year: "2025 - Sekarang" }
+  },
+  footerText: "© 2026 Aka",
+  seo: {
+    title: "aka — Portfolio",
+    description: "Portfolio Aka, pelajar & developer dari Sumatera Barat Indonesia"
+  }
 };
 
 const PortfolioContext = createContext<PortfolioContextType>({
   settings: defaultSettings,
-  updateSettings: () => {}
+  updateSettings: () => {},
+  resetSettings: () => {}
 });
 
 export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<PortfolioSettings>(() => {
     try {
       const saved = localStorage.getItem("aka-portfolio-settings");
-      if (saved) return { ...defaultSettings, ...JSON.parse(saved) };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...defaultSettings,
+          ...parsed,
+          sectionVisibility: { ...defaultSettings.sectionVisibility, ...(parsed.sectionVisibility || {}) },
+          timeline: { ...defaultSettings.timeline, ...(parsed.timeline || {}) },
+          seo: { ...defaultSettings.seo, ...(parsed.seo || {}) }
+        };
+      }
     } catch {}
     return defaultSettings;
   });
@@ -79,8 +130,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const resetSettings = () => {
+    localStorage.removeItem("aka-portfolio-settings");
+    setSettings(defaultSettings);
+  };
+
   return (
-    <PortfolioContext.Provider value={{ settings, updateSettings }}>
+    <PortfolioContext.Provider value={{ settings, updateSettings, resetSettings }}>
       {children}
     </PortfolioContext.Provider>
   );
