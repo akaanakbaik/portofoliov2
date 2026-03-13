@@ -174,13 +174,17 @@ Ubah palet warna dengan edit variabel CSS:
 
 ### 4. Ganti Password Admin
 
-Buka `client/src/pages/Admin.tsx`, cari baris:
+**Cara 1 (Recommended):** Login ke Admin Dashboard → tab **Pengaturan** → kartu **Ganti Password Admin**. Masukkan password baru dan simpan. Password tersimpan di localStorage browser.
+
+**Cara 2 (Reset ke default):** Password default adalah `akaa`. Jika kamu lupa password yang sudah diganti, hapus key `aka-admin-pw` dari localStorage browser untuk kembali ke default.
+
+**Cara 3 (Permanen via kode):** Buka `client/src/pages/Admin.tsx`, cari `getAdminPassword` dan edit:
 
 ```typescript
-const ADMIN_PASSWORD = "AKA ANAK BAIK";
+const getAdminPassword = () => {
+  return localStorage.getItem("aka-admin-pw") || "password_baru_kamu_di_sini";
+};
 ```
-
-Ganti dengan password baru kamu. **Jangan share password ini!**
 
 ### 5. Ganti Path Admin Rahasia
 
@@ -205,7 +209,7 @@ Admin tersembunyi dari publik. Ada **dua cara** masuk:
 > Buka `/x7k9adm2p4q` di browser (path ini bisa diubah di `config.ts`).
 
 ### Login
-Password default: **`AKA ANAK BAIK`** (case-sensitive, ada spasi)
+Password default: **`akaa`**
 
 ### Tab-Tab Admin
 
