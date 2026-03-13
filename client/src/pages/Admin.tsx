@@ -96,18 +96,32 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [stats, setStats] = useState<VisitorStats | null>(null);
   const [langStats, setLangStats] = useState<LangStat[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [draft, setDraft] = useState<PortfolioSettings>({ ...settings });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchAnalytics = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [s, l, m] = await Promise.all([
+        fetch("/api/analytics/stats").then(r => r.json()),
+        fetch("/api/analytics/lang-stats").then(r => r.json()),
+        fetch("/api/messages").then(r => r.json()).catch(() => [])
+      ]);
+      setStats(s);
+      setLangStats(l);
+      setMessages(Array.isArray(m) ? m : []);
+    } catch {}
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => {
     if (sessionStorage.getItem("aka-admin-auth") === "true") setAuthenticated(true);
   }, []);
 
   useEffect(() => {
-    if (authenticated) {
-      fetch("/api/analytics/stats").then(r => r.json()).then(setStats).catch(() => {});
-      fetch("/api/analytics/lang-stats").then(r => r.json()).then(setLangStats).catch(() => {});
-    }
-  }, [authenticated]);
+    if (authenticated) fetchAnalytics();
+  }, [authenticated, fetchAnalytics]);
 
   useEffect(() => {
     setDraft({ ...settings });
@@ -280,7 +294,7 @@ export default function Admin() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
           >
-            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} />}
+            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} onRefresh={fetchAnalytics} refreshing={refreshing} />}
             {activeTab === "home" && <HomeTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "about" && <AboutTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "tech" && <TechTab draft={draft} setDraft={setDraft} onSave={saveChanges} onCancel={cancelChanges} />}
@@ -349,17 +363,54 @@ function SaveBar({ onSave, onCancel }: { onSave: () => void; onCancel: () => voi
   );
 }
 
-function AnalyticsTab({ stats, langStats }: { stats: VisitorStats | null; langStats: LangStat[] }) {
+function AnalyticsTab({ stats, langStats, messages, onRefresh, refreshing }: {
+  stats: VisitorStats | null;
+  langStats: LangStat[];
+  messages: any[];
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [localMessages, setLocalMessages] = useState<any[]>(messages);
+
+  useEffect(() => { setLocalMessages(messages); }, [messages]);
+
   const maxVisit = stats?.history?.length ? Math.max(...stats.history.map(h => h.count), 1) : 1;
   const statCards = [
     { label: "Total Kunjungan", value: stats?.total ?? "—", icon: "👁️", color: "#3b82f6" },
     { label: "Hari Ini", value: stats?.today ?? "—", icon: "📅", color: "#10b981" },
     { label: "Hari Aktif", value: stats?.history?.filter(h => h.count > 0).length ?? "—", icon: "🗓️", color: "#f59e0b" },
-    { label: "Puncak", value: stats?.history?.length ? Math.max(...stats.history.map(h => h.count)) : "—", icon: "🏆", color: "#8b5cf6" },
+    { label: "Pesan Masuk", value: localMessages.length, icon: "✉️", color: "#8b5cf6" },
   ];
+
+  const markRead = async (id: string) => {
+    setLocalMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
+    await fetch(`/api/messages/${id}/read`, { method: "PATCH" });
+  };
+
+  const deleteMsg = async (id: string) => {
+    setDeletingId(id);
+    await fetch(`/api/messages/${id}`, { method: "DELETE" });
+    setLocalMessages(prev => prev.filter(m => m.id !== id));
+    setDeletingId(null);
+  };
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Data kunjungan & pesan masuk</p>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+          style={{ background: "hsl(var(--accent))", color: "hsl(var(--foreground))" }}
+          data-testid="refresh-analytics"
+        >
+          <motion.span animate={refreshing ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: 0.6, repeat: refreshing ? Infinity : 0, ease: "linear" }}>⟳</motion.span>
+          {refreshing ? "Memuat..." : "Refresh"}
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         {statCards.map((s, i) => (
           <motion.div
@@ -382,7 +433,7 @@ function AnalyticsTab({ stats, langStats }: { stats: VisitorStats | null; langSt
       </div>
 
       {stats?.history && stats.history.length > 0 && (
-        <Card title="Riwayat Kunjungan" subtitle="30 hari terakhir">
+        <Card title="Riwayat Kunjungan" subtitle="7 hari terakhir">
           <div className="space-y-2.5">
             {stats.history.slice(-7).reverse().map(h => (
               <div key={h.date} className="flex items-center gap-2.5">
@@ -402,6 +453,54 @@ function AnalyticsTab({ stats, langStats }: { stats: VisitorStats | null; langSt
           </div>
         </Card>
       )}
+
+      <Card title="📬 Pesan Masuk" subtitle={`${localMessages.filter(m => !m.read).length} belum dibaca`}>
+        {localMessages.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-3xl mb-2">📭</p>
+            <p className="text-xs text-muted-foreground">Belum ada pesan masuk</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {localMessages.map(msg => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="rounded-xl p-3.5 cursor-pointer"
+                style={{
+                  background: msg.read ? "hsl(var(--accent)/0.4)" : "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.08))",
+                  border: `1px solid ${msg.read ? "hsl(var(--border))" : "rgba(99,102,241,0.3)"}`
+                }}
+                onClick={() => !msg.read && markRead(msg.id)}
+                data-testid={`message-${msg.id}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {!msg.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+                      <span className="text-xs font-bold text-foreground truncate">{msg.name}</span>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">·</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{msg.email}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{msg.message}</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">{new Date(msg.timestamp).toLocaleString("id-ID")}</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteMsg(msg.id); }}
+                    disabled={deletingId === msg.id}
+                    className="p-1 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors flex-shrink-0"
+                    data-testid={`delete-message-${msg.id}`}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {langStats.length > 0 && (
         <Card title="Statistik Bahasa" subtitle="Analisis sumber kode">
@@ -451,6 +550,19 @@ function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
             <div className="flex items-center gap-2.5 mt-2 p-3 rounded-xl bg-accent/40">
               <img src={draft.photoUrl} alt="preview" className="w-10 h-10 rounded-full object-cover object-top border border-border" />
               <span className="text-xs text-muted-foreground">Preview foto profil</span>
+            </div>
+          )}
+        </Field>
+
+        <Field label="URL Favicon (ikon tab browser)">
+          <input value={draft.faviconUrl || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, faviconUrl: e.target.value }))} className={inputCls} data-testid="admin-favicon-url" placeholder="https://..." />
+          {draft.faviconUrl && (
+            <div className="flex items-center gap-3 mt-2 p-3 rounded-xl bg-accent/40">
+              <img src={draft.faviconUrl} alt="favicon preview" className="w-8 h-8 rounded-lg object-cover border border-border flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <div>
+                <p className="text-xs font-semibold text-foreground">Favicon Preview</p>
+                <p className="text-[10px] text-muted-foreground">Akan muncul di tab browser setelah simpan</p>
+              </div>
             </div>
           )}
         </Field>
