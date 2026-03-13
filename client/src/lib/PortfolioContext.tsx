@@ -30,6 +30,7 @@ export interface TimelineEntry {
 export interface PortfolioSettings {
   name: string;
   photoUrl: string;
+  faviconUrl: string;
   birthDate: string;
   origin: string;
   school: string;
@@ -67,6 +68,7 @@ interface PortfolioContextType {
 const defaultSettings: PortfolioSettings = {
   name: PORTFOLIO_CONFIG.name,
   photoUrl: PORTFOLIO_CONFIG.photoUrl,
+  faviconUrl: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/aka.jpg",
   birthDate: PORTFOLIO_CONFIG.birthDate,
   origin: PORTFOLIO_CONFIG.origin,
   school: PORTFOLIO_CONFIG.school,
