@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import https from "https";
 import http from "http";
 
@@ -24,6 +25,35 @@ interface ContactMessage {
 }
 const contactMessages: ContactMessage[] = [];
 
+const STATS_PATH = path.join(os.tmpdir(), "aka-portfolio-stats.json");
+
+function loadPersistedStats() {
+  try {
+    const data = JSON.parse(fs.readFileSync(STATS_PATH, "utf-8"));
+    if (typeof data.total === "number") totalVisits = data.total;
+    if (Array.isArray(data.history)) {
+      for (const item of data.history) {
+        if (item && typeof item.date === "string" && typeof item.count === "number") {
+          visitHistory.push(item);
+        }
+      }
+    }
+    console.log(`[stats] Loaded ${totalVisits} visits, ${visitHistory.length} days`);
+  } catch {
+    console.log("[stats] No persisted stats found, starting fresh");
+  }
+}
+
+function savePersistedStats() {
+  try {
+    fs.writeFileSync(STATS_PATH, JSON.stringify({ total: totalVisits, history: visitHistory }), "utf-8");
+  } catch (e) {
+    console.warn("[stats] Failed to persist stats:", e);
+  }
+}
+
+loadPersistedStats();
+
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -38,6 +68,7 @@ function recordVisit() {
     visitHistory.push({ date: today, count: 1 });
     if (visitHistory.length > 30) visitHistory.shift();
   }
+  savePersistedStats();
 }
 
 const LANG_COLORS: Record<string, string> = {
@@ -153,6 +184,15 @@ async function translateIdToEn(text: string): Promise<string> {
   throw new Error("All translation engines failed");
 }
 
+function sendEmailWithTimeout(transporter: nodemailer.Transporter, opts: nodemailer.SendMailOptions, ms: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Email send timeout")), ms);
+    transporter.sendMail(opts)
+      .then(() => { clearTimeout(timer); resolve(); })
+      .catch((e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -225,43 +265,25 @@ export async function registerRoutes(
       const emailRecipient = process.env.EMAIL_RECIPIENT || emailUser;
 
       if (!emailUser || !emailPass) {
-        console.warn("[contact] EMAIL_USER/EMAIL_PASS not set — skipping send");
-        return res.json({ ok: true, note: "email_not_configured" });
+        console.warn("[contact] EMAIL_USER/EMAIL_PASS not set — message stored, skipping email");
+        return res.json({ ok: true, note: "stored_only" });
       }
 
-      let transporter: ReturnType<typeof nodemailer.createTransport>;
-      try {
-        transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: { user: emailUser, pass: emailPass },
-          tls: { rejectUnauthorized: false }
-        });
-      } catch (transportErr) {
-        console.error("[contact] Transport creation failed:", transportErr);
-        return res.status(500).json({ error: "Email service unavailable" });
-      }
-
-      const recipient = emailRecipient;
-
-      const htmlContent = `
-<!DOCTYPE html>
+      const htmlContent = `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width">
-</head>
-<body style="margin:0;padding:0;background:#0f0f14;font-family:'Plus Jakarta Sans',system-ui,sans-serif;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head>
+<body style="margin:0;padding:0;background:#0f0f14;font-family:system-ui,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f14;padding:32px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
         <tr>
           <td style="background:linear-gradient(135deg,#1e3a5f,#1a2744);border-radius:16px 16px 0 0;padding:28px 32px;text-align:center;">
-            <h1 style="margin:0;font-size:18px;font-weight:700;color:#fff;">Pesan Baru Masuk</h1>
+            <h1 style="margin:0;font-size:18px;font-weight:700;color:#fff;">📩 Pesan Baru Masuk</h1>
             <p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.5);">Portfolio aka · ${new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
           </td>
         </tr>
         <tr>
-          <td style="background:#141820;padding:28px 32px;border-left:1px solid rgba(255,255,255,0.06);border-right:1px solid rgba(255,255,255,0.06);">
+          <td style="background:#141820;padding:28px 32px;border:1px solid rgba(255,255,255,0.06);border-top:none;">
             <div style="background:#1a1f2a;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
               <p style="margin:0 0 3px;font-size:10px;font-weight:700;letter-spacing:0.08em;color:#3b82f6;text-transform:uppercase;">Pengirim</p>
               <p style="margin:0;font-size:15px;font-weight:600;color:#fff;">${name}</p>
@@ -287,18 +309,35 @@ export async function registerRoutes(
 </body>
 </html>`;
 
-      await transporter.sendMail({
-        from: `"Portfolio aka" <${emailUser}>`,
-        to: recipient,
-        replyTo: email,
-        subject: `📩 Pesan Baru dari ${name} — Portfolio aka`,
-        html: htmlContent
-      });
+      try {
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          auth: { user: emailUser, pass: emailPass },
+          connectionTimeout: 8000,
+          greetingTimeout: 5000,
+          socketTimeout: 8000,
+          tls: { rejectUnauthorized: false }
+        });
+
+        await sendEmailWithTimeout(transporter, {
+          from: `"Portfolio aka" <${emailUser}>`,
+          to: emailRecipient,
+          replyTo: email,
+          subject: `📩 Pesan Baru dari ${name} — Portfolio aka`,
+          html: htmlContent
+        }, 9000);
+
+        console.log(`[contact] Email sent to ${emailRecipient} from ${name}`);
+      } catch (emailErr) {
+        console.error("[contact] Email send failed (message still stored):", emailErr);
+      }
 
       res.json({ ok: true });
     } catch (err) {
-      console.error("Email error:", err);
-      res.status(500).json({ error: "Failed to send email" });
+      console.error("[contact] Unexpected error:", err);
+      res.status(500).json({ error: "Server error" });
     }
   });
 
