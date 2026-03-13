@@ -14,6 +14,16 @@ interface VisitRecord {
 const visitHistory: VisitRecord[] = [];
 let totalVisits = 0;
 
+interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+const contactMessages: ContactMessage[] = [];
+
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -202,6 +212,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid email format" });
       }
 
+      contactMessages.unshift({
+        id: Date.now().toString(),
+        name, email, message,
+        timestamp: new Date().toISOString(),
+        read: false
+      });
+      if (contactMessages.length > 100) contactMessages.splice(100);
+
       const emailUser = process.env.EMAIL_USER;
       const emailPass = process.env.EMAIL_PASS;
       const emailRecipient = process.env.EMAIL_RECIPIENT || emailUser;
@@ -282,6 +300,22 @@ export async function registerRoutes(
       console.error("Email error:", err);
       res.status(500).json({ error: "Failed to send email" });
     }
+  });
+
+  app.get("/api/messages", (_req, res) => {
+    res.json(contactMessages);
+  });
+
+  app.patch("/api/messages/:id/read", (req, res) => {
+    const msg = contactMessages.find(m => m.id === req.params.id);
+    if (msg) msg.read = true;
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/messages/:id", (req, res) => {
+    const idx = contactMessages.findIndex(m => m.id === req.params.id);
+    if (idx !== -1) contactMessages.splice(idx, 1);
+    res.json({ ok: true });
   });
 
   return httpServer;
