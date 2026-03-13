@@ -7,10 +7,11 @@ import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
 
-const getAdminPassword = () => {
-  if (typeof window === "undefined") return "akaa";
-  return localStorage.getItem("aka-admin-pw") || "akaa";
-};
+const getAdminToken = () => sessionStorage.getItem("aka-admin-token") || "";
+const adminHeaders = () => ({
+  "Content-Type": "application/json",
+  "X-Admin-Token": getAdminToken()
+});
 const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
@@ -106,10 +107,12 @@ export default function Admin() {
   const fetchAnalytics = useCallback(async () => {
     setRefreshing(true);
     try {
+      const token = getAdminToken();
+      const headers = { "X-Admin-Token": token };
       const [s, l, m] = await Promise.all([
         fetch("/api/analytics/stats").then(r => r.json()),
         fetch("/api/analytics/lang-stats").then(r => r.json()),
-        fetch("/api/messages").then(r => r.json()).catch(() => [])
+        fetch("/api/messages", { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
       ]);
       setStats(s);
       setLangStats(l);
@@ -119,7 +122,12 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (sessionStorage.getItem("aka-admin-auth") === "true") setAuthenticated(true);
+    const token = sessionStorage.getItem("aka-admin-token");
+    if (!token) return;
+    fetch("/api/admin/check", { headers: { "X-Admin-Token": token } })
+      .then(r => r.json())
+      .then(d => { if (d.ok) setAuthenticated(true); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -130,19 +138,29 @@ export default function Admin() {
     setDraft({ ...settings });
   }, [settings, activeTab]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (!password.trim()) return;
     setLoginLoading(true);
-    setTimeout(() => {
-      if (password === getAdminPassword()) {
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (data.ok && data.token) {
+        sessionStorage.setItem("aka-admin-token", data.token);
         setAuthenticated(true);
-        sessionStorage.setItem("aka-admin-auth", "true");
       } else {
         setWrongPw(true);
-        setTimeout(() => setWrongPw(false), 2000);
-        toast({ title: "Password salah", variant: "destructive" });
+        setTimeout(() => setWrongPw(false), 2500);
+        const msg = res.status === 429 ? data.error : "Password salah";
+        toast({ title: msg, variant: "destructive" });
       }
-      setLoginLoading(false);
-    }, 800);
+    } catch {
+      toast({ title: "Koneksi gagal. Coba lagi.", variant: "destructive" });
+    }
+    setLoginLoading(false);
   };
 
   const saveChanges = () => {
@@ -258,7 +276,11 @@ export default function Admin() {
                 ← Portfolio
               </button>
               <button
-                onClick={() => { setAuthenticated(false); sessionStorage.removeItem("aka-admin-auth"); }}
+                onClick={() => {
+                  fetch("/api/admin/logout", { method: "POST", headers: { "X-Admin-Token": getAdminToken() } }).catch(() => {});
+                  sessionStorage.removeItem("aka-admin-token");
+                  setAuthenticated(false);
+                }}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                 style={{ background: "hsl(var(--destructive)/0.1)", color: "hsl(var(--destructive))" }}
               >
@@ -395,12 +417,12 @@ function AnalyticsTab({ stats, langStats, messages, onRefresh, refreshing }: {
 
   const markRead = async (id: string) => {
     setLocalMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
-    await fetch(`/api/messages/${id}/read`, { method: "PATCH" });
+    await fetch(`/api/messages/${id}/read`, { method: "PATCH", headers: { "X-Admin-Token": getAdminToken() } });
   };
 
   const deleteMsg = async (id: string) => {
     setDeletingId(id);
-    await fetch(`/api/messages/${id}`, { method: "DELETE" });
+    await fetch(`/api/messages/${id}`, { method: "DELETE", headers: { "X-Admin-Token": getAdminToken() } });
     setLocalMessages(prev => prev.filter(m => m.id !== id));
     setDeletingId(null);
   };
@@ -1052,13 +1074,28 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset }: any) {
   const [confirmPw, setConfirmPw] = useState("");
   const [showNewPw, setShowNewPw] = useState(false);
 
-  const changePw = () => {
+  const changePw = async () => {
     if (!newPw.trim()) return toast({ title: "Password tidak boleh kosong", variant: "destructive" });
     if (newPw.length < 3) return toast({ title: "Password minimal 3 karakter", variant: "destructive" });
     if (newPw !== confirmPw) return toast({ title: "Password tidak cocok", description: "Pastikan kedua field sama", variant: "destructive" });
-    localStorage.setItem("aka-admin-pw", newPw);
-    toast({ title: "Password berhasil diubah ✓", description: `Password baru: "${newPw}" — catat baik-baik!` });
-    setNewPw(""); setConfirmPw("");
+    try {
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ newPassword: newPw })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        toast({ title: "Password berhasil diubah ✓", description: "Semua sesi lain dihapus. Login ulang dengan password baru." });
+        setNewPw(""); setConfirmPw("");
+        sessionStorage.removeItem("aka-admin-token");
+        setTimeout(() => setAuthenticated(false), 1500);
+      } else {
+        toast({ title: data.error || "Gagal mengubah password", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Koneksi gagal", variant: "destructive" });
+    }
   };
 
   useEffect(() => {
