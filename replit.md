@@ -8,7 +8,7 @@ A premium, full-featured personal portfolio website for "aka" - a 16-year-old st
 - **Bilingual** - Indonesian / English language toggle with flag icons
 - **Dark/Light Theme** - smooth animated toggle
 - **Floating Audio Player** - premium mini player with 3 songs, auto-minimize, expand/collapse. Uses vanilla `new Audio()` ref outside React for persistence.
-- **Admin Dashboard** - secret path `/x7k9adm2p4q`, accessed by clicking footer copyright 10x in 4.3s, password: "AKA ANAK BAIK"
+- **Admin Dashboard** - secret path `/x7k9adm2p4q`, accessed by clicking footer copyright 10x in 4.3s, password: `akaa` (configurable via `ADMIN_PASSWORD` env var)
 - **Auto-Translate API** - `/api/translate` endpoint (Google Translate gtx + MyMemory fallback) used by Admin to auto-translate ID→EN descriptions
 - **Contact Form** - sends email via Nodemailer (Gmail) to portfolio owner
 
@@ -37,7 +37,8 @@ All sections use `py-14` for compact, professional spacing (down from `py-20`). 
 - Visitor analytics with 7-day history bar chart + language stats bar chart
 - **Auto-translate**: All bilingual text fields (status texts, about description, project descriptions) have an "ID→EN" translate button calling `/api/translate`
 - Settings for all portfolio data, persisted in localStorage key `aka-portfolio-settings`
-- Admin session in sessionStorage key `aka-admin-auth`
+- Admin session: server-side token stored in sessionStorage key `aka-admin-token` (24hr expiry)
+- Rate limiting: 5 wrong attempts → blocked for 15 minutes (by IP)
 
 ## Translation API
 - Endpoint: `POST /api/translate` — body: `{ text: string }` — response: `{ ok: true, result: string }`
@@ -47,15 +48,25 @@ All sections use `py-14` for compact, professional spacing (down from `py-20`). 
 
 ## Environment Variables
 - `EMAIL_USER`: Gmail address for sending contact form emails
-- `EMAIL_PASS`: Gmail app password
-- `EMAIL_RECIPIENT`: Recipient email for contact form messages
+- `EMAIL_PASS`: Gmail app password (App Password from Google Account)
+- `EMAIL_RECIPIENT`: Recipient email for contact form messages (defaults to EMAIL_USER)
+- `ADMIN_PASSWORD`: Admin dashboard password (default: `akaa` — **set this in Vercel for security**)
 - `SESSION_SECRET`: Secret key for session management
 
 ## Secret Admin Access
 1. Scroll to the footer
 2. Click "© 2026 Aka" exactly 10 times within 4.3 seconds
-3. You'll be redirected to the admin login page
-4. Enter password: "AKA ANAK BAIK"
+3. You'll be redirected to the admin login page at `/x7k9adm2p4q`
+4. Enter password: `akaa` (or whatever `ADMIN_PASSWORD` env var is set to)
+
+## Security Features
+- Server-side authentication: password validated by server, never exposed to client
+- Rate limiting: 5 wrong attempts per IP → blocked for 15 minutes
+- Session tokens: 32-byte random hex, expires in 24 hours
+- Protected API routes: `/api/messages*` require valid admin token (`X-Admin-Token` header)
+- Security headers: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy
+- Input sanitization: HTML characters escaped in all user-submitted data
+- Email is fire-and-forget: contact form always returns 200 (message stored in inbox first)
 
 ## Key Files
 - `client/src/lib/config.ts` - All portfolio data configuration
