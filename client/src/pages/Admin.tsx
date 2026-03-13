@@ -7,7 +7,10 @@ import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
 
-const ADMIN_PASSWORD = "AKA ANAK BAIK";
+const getAdminPassword = () => {
+  if (typeof window === "undefined") return "akaa";
+  return localStorage.getItem("aka-admin-pw") || "akaa";
+};
 const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
@@ -130,7 +133,7 @@ export default function Admin() {
   const handleLogin = () => {
     setLoginLoading(true);
     setTimeout(() => {
-      if (password === ADMIN_PASSWORD) {
+      if (password === getAdminPassword()) {
         setAuthenticated(true);
         sessionStorage.setItem("aka-admin-auth", "true");
       } else {
@@ -265,22 +268,29 @@ export default function Admin() {
           </div>
 
           <div className="flex gap-1 pb-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-            {TAB_CONFIG.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                data-testid={`admin-tab-${tab.key}`}
-                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all"
-                style={{
-                  background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
-                  color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
-                  borderBottom: activeTab === tab.key ? "2px solid transparent" : "2px solid transparent"
-                }}
-              >
-                <span>{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-              </button>
-            ))}
+            {TAB_CONFIG.map(tab => {
+              const unread = tab.key === "analytics" ? messages.filter((m: any) => !m.read).length : 0;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  data-testid={`admin-tab-${tab.key}`}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative"
+                  style={{
+                    background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
+                    color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  {unread > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: "#ef4444", color: "white" }}>
+                      {unread > 9 ? "9+" : unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -643,17 +653,32 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
   );
 }
 
+const CAT_META = {
+  programming: { label: "🧠 Programming", color: "#3b82f6" },
+  framework: { label: "⚡ Framework & Library", color: "#6366f1" },
+  tools: { label: "🔧 Tools & Platform", color: "#10b981" }
+} as const;
+
 function TechTab({ draft, setDraft, onSave, onCancel }: any) {
-  const [newTech, setNewTech] = useState({ category: "tools", name: "" });
+  const { toast } = useToast();
+  const [addName, setAddName] = useState("");
+  const [addCat, setAddCat] = useState<"programming" | "framework" | "tools">("tools");
+  const [search, setSearch] = useState("");
 
   const addTech = () => {
-    const name = newTech.name.trim().toLowerCase();
+    const name = addName.trim().toLowerCase().replace(/\s+/g, "");
     if (!name) return;
+    const existing = (draft.techStack[addCat] as string[]);
+    if (existing.includes(name)) {
+      toast({ title: "Sudah ada", description: `"${name}" sudah di daftar ${addCat}`, variant: "destructive" });
+      return;
+    }
     setDraft((d: PortfolioSettings) => ({
       ...d,
-      techStack: { ...d.techStack, [newTech.category]: [...(d.techStack[newTech.category as keyof typeof d.techStack] as string[]), name] }
+      techStack: { ...d.techStack, [addCat]: [...existing, name] }
     }));
-    setNewTech(n => ({ ...n, name: "" }));
+    setAddName("");
+    toast({ title: "Ditambahkan ✓", description: `"${name}" ditambah ke ${addCat}` });
   };
 
   const removeTech = (cat: string, name: string) => {
@@ -663,45 +688,171 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
     }));
   };
 
+  const moveTech = (cat: string, name: string, dir: -1 | 1) => {
+    setDraft((d: PortfolioSettings) => {
+      const arr = [...(d.techStack[cat as keyof typeof d.techStack] as string[])];
+      const idx = arr.indexOf(name);
+      if (idx < 0) return d;
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= arr.length) return d;
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      return { ...d, techStack: { ...d.techStack, [cat]: arr } };
+    });
+  };
+
+  const totalCount = Object.values(draft.techStack).flat().length;
+
   return (
     <div className="space-y-4">
-      <Card title="💻 Tambah Teknologi" subtitle="Cek nama di tech-stack-icons.com">
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <select value={newTech.category} onChange={e => setNewTech(n => ({ ...n, category: e.target.value }))} className={inputCls + " w-32 flex-shrink-0"}>
-              <option value="programming">Programming</option>
-              <option value="framework">Framework</option>
-              <option value="tools">Tools</option>
-            </select>
-            <input value={newTech.name} onChange={e => setNewTech(n => ({ ...n, name: e.target.value }))} onKeyDown={e => e.key === "Enter" && addTech()} placeholder="Nama icon (react, go, nodejs...)" className={inputCls + " flex-1"} />
-            <motion.button whileTap={{ scale: 0.93 }} onClick={addTech} className="px-4 py-2 rounded-xl text-sm font-bold flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "white" }}>+</motion.button>
+      <Card title="➕ Tambah Teknologi Baru" subtitle="Nama harus sesuai dengan library tech-stack-icons">
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.entries(CAT_META) as [string, { label: string; color: string }][]).map(([key, meta]) => (
+              <button
+                key={key}
+                onClick={() => setAddCat(key as any)}
+                className="flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-all"
+                style={{
+                  background: addCat === key ? `${meta.color}20` : "hsl(var(--accent)/0.5)",
+                  border: `1.5px solid ${addCat === key ? meta.color : "transparent"}`,
+                  color: addCat === key ? meta.color : "hsl(var(--muted-foreground))"
+                }}
+                data-testid={`cat-select-${key}`}
+              >
+                <span className="text-base">{meta.label.split(" ")[0]}</span>
+                <span>{key}</span>
+              </button>
+            ))}
           </div>
 
-          {newTech.name && (
-            <div className="flex items-center gap-2.5 p-3 rounded-xl" style={{ background: "rgba(8,8,14,0.6)", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <span className="text-xs text-white/40">Preview:</span>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(10,10,18,0.9)" }}>
-                <StackIcon name={newTech.name.toLowerCase()} variant="dark" className="w-5 h-5" />
+          <div className="space-y-2.5">
+            <div
+              className="flex items-center gap-3 p-3.5 rounded-xl"
+              style={{ background: "hsl(var(--accent)/0.4)", border: "1px solid hsl(var(--border)/0.6)" }}
+            >
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
+                {addName.trim() ? (
+                  <StackIcon name={addName.trim().toLowerCase()} variant="dark" className="w-5 h-5" />
+                ) : (
+                  <span className="text-lg text-muted-foreground/40">?</span>
+                )}
               </div>
-              <span className="text-xs font-mono text-white/60">{newTech.name}</span>
+              <div className="flex-1 min-w-0">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  Nama Ikon (contoh: react, nodejs, go, typescript)
+                </label>
+                <input
+                  dir="ltr"
+                  value={addName}
+                  onChange={e => setAddName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTech(); } }}
+                  placeholder="Ketik nama icon, Enter untuk tambah..."
+                  data-testid="tech-add-input"
+                  className={inputCls}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
             </div>
-          )}
+
+            {addName.trim() && (
+              <div className="p-2.5 rounded-xl text-xs flex items-center gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
+                <span className="text-blue-400">ℹ️</span>
+                <span className="text-muted-foreground">Preview ikon dari <strong className="text-foreground">tech-stack-icons</strong> — jika tampil ✓ nama valid</span>
+              </div>
+            )}
+
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={addTech}
+              disabled={!addName.trim()}
+              data-testid="tech-add-btn"
+              className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+              style={{
+                background: addName.trim() ? `linear-gradient(135deg, ${CAT_META[addCat].color}, ${addCat === "programming" ? "#6366f1" : addCat === "framework" ? "#8b5cf6" : "#0d9488"})` : "hsl(var(--muted))",
+                color: addName.trim() ? "white" : "hsl(var(--muted-foreground))",
+                cursor: addName.trim() ? "pointer" : "not-allowed"
+              }}
+            >
+              <span>+</span>
+              <span>Tambah ke {CAT_META[addCat].label.replace(/^[^ ]+ /, "")}</span>
+            </motion.button>
+          </div>
         </div>
       </Card>
 
-      {(["programming", "framework", "tools"] as const).map(cat => (
-        <Card key={cat} title={cat.charAt(0).toUpperCase() + cat.slice(1)}>
-          <div className="flex flex-wrap gap-2">
-            {(draft.techStack[cat] as string[]).map((name: string) => (
-              <div key={name} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{ background: "rgba(8,8,14,0.7)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <StackIcon name={name} variant="dark" className="w-3.5 h-3.5" />
-                <span className="text-[11px] font-mono" style={{ color: "rgba(255,255,255,0.55)" }}>{name}</span>
-                <button onClick={() => removeTech(cat, name)} className="text-red-400/60 hover:text-red-400 text-xs ml-0.5">×</button>
+      <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="text-muted-foreground flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input
+          dir="ltr"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={`Cari dari ${totalCount} teknologi terdaftar...`}
+          className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground/50"
+          data-testid="tech-search-input"
+        />
+        {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-foreground text-xs">✕</button>}
+      </div>
+
+      {(["programming", "framework", "tools"] as const).map(cat => {
+        const items = (draft.techStack[cat] as string[]).filter((n: string) =>
+          !search || n.toLowerCase().includes(search.toLowerCase())
+        );
+        const meta = CAT_META[cat];
+        return (
+          <Card key={cat} title={meta.label} subtitle={`${(draft.techStack[cat] as string[]).length} item${items.length !== (draft.techStack[cat] as string[]).length ? ` · ${items.length} cocok` : ""}`}>
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-2">{search ? "Tidak ada yang cocok" : "Belum ada teknologi"}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {items.map((name: string, idx: number) => (
+                  <motion.div
+                    key={name}
+                    layout
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.85 }}
+                    className="group flex items-center gap-2 px-2.5 py-2 rounded-xl"
+                    style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}
+                    data-testid={`tech-item-${cat}-${name}`}
+                  >
+                    <StackIcon name={name} variant="dark" className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-[11px] font-mono text-foreground/80">{name}</span>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => moveTech(cat, name, -1)}
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                        title="Pindah kiri"
+                        data-testid={`tech-move-left-${name}`}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M15 18l-6-6 6-6"/></svg>
+                      </button>
+                      <button
+                        onClick={() => moveTech(cat, name, 1)}
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                        title="Pindah kanan"
+                        data-testid={`tech-move-right-${name}`}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M9 18l6-6-6-6"/></svg>
+                      </button>
+                      <button
+                        onClick={() => removeTech(cat, name)}
+                        className="p-0.5 rounded text-red-400/50 hover:text-red-400 transition-colors"
+                        title="Hapus"
+                        data-testid={`tech-remove-${name}`}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
-            ))}
-          </div>
-        </Card>
-      ))}
+            )}
+          </Card>
+        );
+      })}
 
       <SaveBar onSave={onSave} onCancel={onCancel} />
     </div>
@@ -897,6 +1048,18 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset }: any) {
   const { toast } = useToast();
   const [clock, setClock] = useState(new Date());
   const [confirmReset, setConfirmReset] = useState(false);
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showNewPw, setShowNewPw] = useState(false);
+
+  const changePw = () => {
+    if (!newPw.trim()) return toast({ title: "Password tidak boleh kosong", variant: "destructive" });
+    if (newPw.length < 3) return toast({ title: "Password minimal 3 karakter", variant: "destructive" });
+    if (newPw !== confirmPw) return toast({ title: "Password tidak cocok", description: "Pastikan kedua field sama", variant: "destructive" });
+    localStorage.setItem("aka-admin-pw", newPw);
+    toast({ title: "Password berhasil diubah ✓", description: `Password baru: "${newPw}" — catat baik-baik!` });
+    setNewPw(""); setConfirmPw("");
+  };
 
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000);
@@ -1046,6 +1209,67 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset }: any) {
             ↑ Impor JSON
             <input type="file" accept=".json" onChange={importSettings} className="hidden" />
           </label>
+        </div>
+      </Card>
+
+      <Card title="🔑 Ganti Password Admin" subtitle="Password tersimpan di browser ini saja">
+        <div className="space-y-3">
+          <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+            <span>⚠️</span>
+            <span className="text-amber-600 dark:text-amber-400">Password disimpan di localStorage browser ini. Jika ganti browser/device, password default (akaa) akan berlaku.</span>
+          </div>
+          <Field label="Password Baru">
+            <div className="relative">
+              <input
+                type={showNewPw ? "text" : "password"}
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && changePw()}
+                className={inputCls + " pr-10"}
+                placeholder="Password baru..."
+                data-testid="new-password-input"
+                autoComplete="new-password"
+              />
+              <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {showNewPw ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></> : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}
+                </svg>
+              </button>
+            </div>
+          </Field>
+          <Field label="Konfirmasi Password">
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={e => setConfirmPw(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && changePw()}
+              className={inputCls}
+              placeholder="Ulangi password baru..."
+              data-testid="confirm-password-input"
+              autoComplete="new-password"
+            />
+          </Field>
+          {newPw && confirmPw && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <div className={`w-1.5 h-1.5 rounded-full ${newPw === confirmPw ? "bg-green-500" : "bg-red-500"}`} />
+              <span className={newPw === confirmPw ? "text-green-500" : "text-red-400"}>
+                {newPw === confirmPw ? "Password cocok" : "Password tidak cocok"}
+              </span>
+            </div>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={changePw}
+            disabled={!newPw || !confirmPw || newPw !== confirmPw}
+            data-testid="save-password-btn"
+            className="w-full py-2.5 rounded-xl text-sm font-bold transition-all"
+            style={{
+              background: newPw && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
+              color: newPw && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
+            }}
+          >
+            Simpan Password Baru
+          </motion.button>
         </div>
       </Card>
 
