@@ -1249,11 +1249,11 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset }: any) {
         </div>
       </Card>
 
-      <Card title="🔑 Ganti Password Admin" subtitle="Password tersimpan di browser ini saja">
+      <Card title="🔑 Ganti Password Admin" subtitle="Password diverifikasi di server">
         <div className="space-y-3">
-          <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
-            <span>⚠️</span>
-            <span className="text-amber-600 dark:text-amber-400">Password disimpan di localStorage browser ini. Jika ganti browser/device, password default (akaa) akan berlaku.</span>
+          <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}>
+            <span>ℹ️</span>
+            <span className="text-blue-600 dark:text-blue-400">Password diverifikasi di server, <b>tidak disimpan di browser</b>. Untuk perubahan permanen di Vercel, set env var <code className="bg-black/10 px-1 rounded">ADMIN_PASSWORD</code> di dashboard Vercel lalu redeploy.</span>
           </div>
           <Field label="Password Baru">
             <div className="relative">
