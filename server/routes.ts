@@ -290,6 +290,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── Test email (admin only) ──────────────────────────────────────────────────
+  app.post("/api/admin/test-email", requireAdmin, async (req, res) => {
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+    const emailTo = process.env.EMAIL_RECIPIENT || emailUser;
+    if (!emailUser || !emailPass) {
+      return res.json({ ok: false, error: "EMAIL_USER / EMAIL_PASS belum diset di environment variables" });
+    }
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com", port: 465, secure: true,
+        auth: { user: emailUser, pass: emailPass },
+        connectionTimeout: 8000, socketTimeout: 8000,
+        tls: { rejectUnauthorized: false }
+      });
+      await Promise.race([
+        transporter.sendMail({
+          from: `"Portfolio aka" <${emailUser}>`, to: emailTo,
+          subject: "✅ Test Email — Admin Dashboard Portfolio aka",
+          html: `<div style="font-family:system-ui;padding:24px;background:#0f0f14;color:#fff;border-radius:12px;max-width:400px">
+            <h2 style="margin:0 0 8px;color:#3b82f6">✅ Email Berhasil!</h2>
+            <p style="margin:0;color:rgba(255,255,255,0.7)">Konfigurasi email Anda berjalan dengan baik.</p>
+            <p style="margin:12px 0 0;font-size:12px;color:rgba(255,255,255,0.4)">Dikirim dari Admin Dashboard · ${new Date().toLocaleString("id-ID")}</p>
+          </div>`
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 9000))
+      ]);
+      console.log(`[admin] Test email sent to ${emailTo}`);
+      res.json({ ok: true, to: emailTo });
+    } catch (err: any) {
+      const msg = err?.message || "Unknown error";
+      console.error("[admin] Test email failed:", msg);
+      res.json({ ok: false, error: msg });
+    }
+  });
+
   // ── Translate ───────────────────────────────────────────────────────────────
   app.post("/api/translate", async (req, res) => {
     try {
