@@ -32,13 +32,19 @@ All sections use `py-14` for compact, professional spacing (down from `py-20`). 
 - Routing: wouter
 
 ## Admin Dashboard Features (Tab-Based, Mobile-Friendly)
-- Horizontal scrollable tab bar at top - no sidebar
-- Tabs: Analytics, Home (beranda), About (tentang), Tech Stack, Projects (proyek), Friends (teman), Social Media (medsos), Audio
-- Visitor analytics with 7-day history bar chart + language stats bar chart
-- **Auto-translate**: All bilingual text fields (status texts, about description, project descriptions) have an "ID→EN" translate button calling `/api/translate`
+- Horizontal scrollable tab bar at top with unsaved-changes dot indicator (amber dot per tab)
+- Tabs: Analytics, Home, About, Tech, Projects, Friends, Social, Audio, Settings
+- Visitor analytics with 14-day history bar chart + language stats + message inbox
+- **Message Inbox**: expand/collapse, reply button (mailto), mark all read, filter unread
+- **Auto-translate**: All bilingual text fields have "ID→EN" button calling `/api/translate`
+- **Friends Tab**: Chip-based add/remove (no more plain textarea)
+- **Test Email**: Admin can send test email to verify Gmail config works (`/api/admin/test-email`)
+- **Password Strength Meter**: Visual bar (Lemah/Sedang/Kuat) when changing password
+- **Fixed Critical Bug**: `setAuthenticated` now passed as `onLogout` prop to SettingsTab (was causing ReferenceError)
 - Settings for all portfolio data, persisted in localStorage key `aka-portfolio-settings`
-- Admin session: server-side token stored in sessionStorage key `aka-admin-token` (24hr expiry)
+- Admin session: HMAC-SHA256 stateless token in sessionStorage key `aka-admin-token` (24hr expiry)
 - Rate limiting: 5 wrong attempts → blocked for 15 minutes (by IP)
+- Projects and Audio tracks support reordering (up/down buttons)
 
 ## Translation API
 - Endpoint: `POST /api/translate` — body: `{ text: string }` — response: `{ ok: true, result: string }`
