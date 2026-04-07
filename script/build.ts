@@ -59,6 +59,26 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  // Build the Vercel API function as a pre-compiled CJS bundle.
+  // This bypasses Vercel's TypeScript compiler (which has issues with
+  // our tsconfig's noEmit:true / moduleResolution:bundler / module:ESNext settings).
+  // esbuild bundles everything into a single CJS file that Vercel runs directly.
+  console.log("building api function for Vercel...");
+  await esbuild({
+    entryPoints: ["api/index.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "api/server.js",
+    define: {
+      "process.env.NODE_ENV": '"production"',
+    },
+    minify: false,
+    // Bundle all deps (express, nodemailer, etc.) so the function is self-contained
+    external: ["fsevents"],
+    logLevel: "info",
+  });
 }
 
 buildAll().catch((err) => {
