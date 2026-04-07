@@ -6,27 +6,38 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Error handler
+// Register routes (fire-and-forget — registration is synchronous even though fn is async)
+let routesReady = false;
+const routeSetup = (async () => {
+  try {
+    await registerRoutes(null as any, app);
+    routesReady = true;
+    console.log("[api] Routes registered successfully");
+  } catch (err) {
+    console.error("[api] Failed to register routes:", err);
+  }
+})();
+
+// 4-arg error handler MUST be after routes
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error("[api] Unhandled error:", err);
+  console.error("[api] Express error:", err);
   const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  if (!res.headersSent) res.status(status).json({ message });
+  if (!res.headersSent) res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 
-// Initialize routes once (synchronous — registerRoutes only calls app.use/app.get/app.post)
-let initialized = false;
-function ensureInit() {
-  if (initialized) return;
-  initialized = true;
-  // registerRoutes is async but only does synchronous route registration
-  // We call it synchronously by ignoring the returned promise value
-  // All route handlers are registered immediately (no awaits in the registration code itself)
-  registerRoutes(null as any, app).catch((e) => {
-    console.error("[api] Failed to register routes:", e);
-  });
+export default async function handler(req: Request, res: Response) {
+  try {
+    await routeSetup;
+    app(req, res, (err: any) => {
+      if (err) {
+        console.error("[api] Unhandled route error:", err);
+        if (!res.headersSent) res.status(500).json({ error: String(err?.message || err) });
+      }
+    });
+  } catch (err: any) {
+    console.error("[api] Handler crash:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: String(err?.message || "Handler failed") });
+    }
+  }
 }
-
-ensureInit();
-
-export default app;
