@@ -1,58 +1,32 @@
 import express, { type Request, type Response, type NextFunction } from "express";
-import { createServer } from "http";
 import { registerRoutes } from "../server/routes";
 
 const app = express();
 
-// Security headers (applied before all routes)
-app.use((_req, res, next) => {
-  res.removeHeader("X-Powered-By");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
-  res.setHeader("X-XSS-Protection", "1; mode=block");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  next();
-});
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const httpServer = createServer(app);
+// Error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("[api] Unhandled error:", err);
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  if (!res.headersSent) res.status(status).json({ message });
+});
 
-let initDone = false;
-let initErr: Error | null = null;
-
-const initPromise = (async () => {
-  try {
-    await registerRoutes(httpServer, app);
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      console.error("Express error:", err);
-      if (!res.headersSent) res.status(status).json({ message });
-    });
-    initDone = true;
-  } catch (e) {
-    initErr = e as Error;
-    console.error("Failed to init routes:", e);
-  }
-})();
-
-export default async function handler(req: Request, res: Response) {
-  try {
-    await initPromise;
-    if (initErr) {
-      return res.status(500).json({ error: "Server initialization failed", message: initErr.message });
-    }
-    app(req, res, (err: any) => {
-      if (err) {
-        console.error("Unhandled route error:", err);
-        if (!res.headersSent) res.status(500).json({ error: "Internal Server Error" });
-      }
-    });
-  } catch (e: any) {
-    console.error("Handler error:", e);
-    if (!res.headersSent) res.status(500).json({ error: e.message || "Internal Server Error" });
-  }
+// Initialize routes once (synchronous — registerRoutes only calls app.use/app.get/app.post)
+let initialized = false;
+function ensureInit() {
+  if (initialized) return;
+  initialized = true;
+  // registerRoutes is async but only does synchronous route registration
+  // We call it synchronously by ignoring the returned promise value
+  // All route handlers are registered immediately (no awaits in the registration code itself)
+  registerRoutes(null as any, app).catch((e) => {
+    console.error("[api] Failed to register routes:", e);
+  });
 }
+
+ensureInit();
+
+export default app;
