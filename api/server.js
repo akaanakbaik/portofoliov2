@@ -38107,3 +38107,4 @@ serve-static/index.js:
    * MIT Licensed
    *)
 */
+if (typeof module.exports.default === 'function') module.exports = module.exports.default;
