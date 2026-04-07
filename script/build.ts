@@ -64,6 +64,10 @@ async function buildAll() {
   // This bypasses Vercel's TypeScript compiler (which has issues with
   // our tsconfig's noEmit:true / moduleResolution:bundler / module:ESNext settings).
   // esbuild bundles everything into a single CJS file that Vercel runs directly.
+  //
+  // IMPORTANT: Vercel's @vercel/node expects module.exports = handler (not .default).
+  // esbuild compiles `export default fn` to module.exports.default = fn.
+  // The footer rewires: module.exports = module.exports.default
   console.log("building api function for Vercel...");
   await esbuild({
     entryPoints: ["api/index.ts"],
@@ -77,6 +81,8 @@ async function buildAll() {
     minify: false,
     // Bundle all deps (express, nodemailer, etc.) so the function is self-contained
     external: ["fsevents"],
+    // Rewire export for Vercel: module.exports = handler (not module.exports.default)
+    footer: { js: "if (typeof module.exports.default === 'function') module.exports = module.exports.default;" },
     logLevel: "info",
   });
 }
