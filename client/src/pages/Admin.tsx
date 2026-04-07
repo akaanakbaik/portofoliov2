@@ -170,7 +170,7 @@ export default function Admin() {
   // Track unsaved changes per tab
   const handleDraftChange = (updater: (d: PortfolioSettings) => PortfolioSettings) => {
     setDraft(updater);
-    setUnsavedTabs(prev => new Set([...prev, activeTab]));
+    setUnsavedTabs(prev => new Set(Array.from(prev).concat([activeTab])));
   };
 
   const handleLogin = async () => {
