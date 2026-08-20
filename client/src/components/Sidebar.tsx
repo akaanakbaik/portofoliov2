@@ -11,8 +11,10 @@ const navItems = [
   { key: "home", icon: "🏠" },
   { key: "about", icon: "👤" },
   { key: "timeline", icon: "📅" },
+  { key: "stack", icon: "🧰" },
   { key: "projects", icon: "💼" },
   { key: "friends", icon: "👥" },
+  { key: "social", icon: "🔗" },
   { key: "contact", icon: "✉️" }
 ];
 
@@ -73,6 +75,7 @@ export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps
                         : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     }`}
                     whileTap={{ scale: 0.96 }}
+                    aria-current={isActive ? "true" : undefined}
                   >
                     <span className="text-sm">{item.icon}</span>
                     <span className="text-sm font-medium">{label}</span>

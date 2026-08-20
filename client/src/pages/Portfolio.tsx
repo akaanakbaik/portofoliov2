@@ -12,13 +12,15 @@ import FriendsSection from "@/components/sections/FriendsSection";
 import SocialSection from "@/components/sections/SocialSection";
 import ContactSection from "@/components/sections/ContactSection";
 import { usePortfolio } from "@/lib/PortfolioContext";
+import { useLang } from "@/lib/LangContext";
 
-const ALL_SECTIONS = ["home", "about", "timeline", "stack", "projects", "friends", "contact"];
+const ALL_SECTIONS = ["home", "about", "timeline", "stack", "projects", "friends", "social", "contact"];
 
 export default function Portfolio() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("home");
   const { settings } = usePortfolio();
+  const { lang } = useLang();
   const vis = settings.sectionVisibility;
 
   useEffect(() => {
@@ -63,13 +65,14 @@ export default function Portfolio() {
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Header onMenuClick={() => setSidebarOpen(true)} />
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-16 focus:z-[100] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-primary-foreground">{lang === "id" ? "Lewati ke konten utama" : "Skip to main content"}</a>
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         activeSection={activeSection}
       />
 
-      <main>
+      <main id="main-content">
         <HomeSection />
         {vis.about !== false && <AboutSection />}
         {vis.timeline !== false && <TimelineSection />}

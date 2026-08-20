@@ -86,7 +86,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           onClick={onMenuClick}
           className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-lg hover:bg-accent/60 transition-all duration-200"
           whileTap={{ scale: 0.92 }}
-          aria-label="Toggle menu"
+          aria-label={lang === "id" ? "Buka menu navigasi" : "Open navigation menu"}
         >
           <span className="block w-5 h-0.5 bg-foreground/80 rounded-full" />
           <span className="block w-5 h-0.5 bg-foreground/80 rounded-full" />
@@ -106,7 +106,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             onClick={handleLangToggle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent/40 hover:bg-accent/80 border border-border/50 transition-all duration-200"
             whileTap={{ scale: 0.92 }}
-            aria-label="Toggle language"
+            aria-label={lang === "id" ? "Ganti bahasa" : "Change language"}
           >
             <AnimatePresence mode="wait">
               <motion.div
@@ -128,7 +128,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             onClick={handleThemeToggle}
             className="w-9 h-9 flex items-center justify-center rounded-lg bg-accent/40 hover:bg-accent/80 border border-border/50 transition-all duration-200 text-foreground/80"
             whileTap={{ scale: 0.92 }}
-            aria-label="Toggle theme"
+            aria-label={theme === "dark" ? (lang === "id" ? "Aktifkan mode terang" : "Enable light mode") : (lang === "id" ? "Aktifkan mode gelap" : "Enable dark mode")}
           >
             <AnimatePresence mode="wait">
               <motion.div
