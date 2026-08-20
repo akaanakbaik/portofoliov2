@@ -1,7 +1,7 @@
 export type SchoolLevel = "sd" | "mts" | "sma";
 
 const schoolAssets: Record<SchoolLevel, string> = {
-  sd: "/assets/schools/sdn13-lembah-melintang.jpg",
+  sd: "/assets/schools/sdn13-lembah-melintang.png",
   mts: "/assets/schools/mtsn2-pasaman.jpg",
   sma: "/assets/schools/sman1-lembah-melintang.png"
 };
