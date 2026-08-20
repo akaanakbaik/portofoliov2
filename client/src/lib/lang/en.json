@@ -3,8 +3,10 @@
     "home": "Home",
     "about": "About",
     "timeline": "Timeline",
+    "stack": "Stack",
     "projects": "Projects",
     "friends": "Friends",
+    "social": "Social",
     "contact": "Contact"
   },
   "home": {
