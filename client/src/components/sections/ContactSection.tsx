@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,10 @@ export default function ContactSection() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    setErrors({});
+  }, [lang]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
