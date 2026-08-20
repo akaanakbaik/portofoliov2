@@ -6,6 +6,7 @@ import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
+import { EducationMark, SvgIcon, type SvgIconName } from "@/components/SvgIcon";
 
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 const getAdminToken = () => sessionStorage.getItem("aka-admin-token") || "";
@@ -19,22 +20,26 @@ interface VisitorStats { total: number; today: number; history: { date: string; 
 interface LangStat { language: string; lines: number; percentage: number; color: string }
 interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean }
 
-const TAB_CONFIG: { key: Tab; icon: string; label: string }[] = [
-  { key: "analytics", icon: "📊", label: "Analitik" },
-  { key: "home",      icon: "🏠", label: "Beranda"  },
-  { key: "about",     icon: "👤", label: "Tentang"  },
-  { key: "tech",      icon: "💻", label: "Tech"     },
-  { key: "projects",  icon: "💼", label: "Proyek"   },
-  { key: "friends",   icon: "👥", label: "Teman"    },
-  { key: "social",    icon: "🔗", label: "Medsos"   },
-  { key: "audio",     icon: "🎵", label: "Audio"    },
-  { key: "settings",  icon: "⚙️", label: "Setting"  },
+const TAB_CONFIG: { key: Tab; icon: SvgIconName; label: string }[] = [
+  { key: "analytics", icon: "analytics", label: "Analitik" },
+  { key: "home",      icon: "home", label: "Beranda"  },
+  { key: "about",     icon: "user", label: "Tentang"  },
+  { key: "tech",      icon: "code", label: "Tech"     },
+  { key: "projects",  icon: "briefcase", label: "Proyek"   },
+  { key: "friends",   icon: "users", label: "Teman"    },
+  { key: "social",    icon: "link", label: "Medsos"   },
+  { key: "audio",     icon: "music", label: "Audio"    },
+  { key: "settings",  icon: "settings", label: "Setting"  },
 ];
 
 // ── Shared UI components ───────────────────────────────────────────────────────
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all bg-background border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/10";
 
-function Card({ title, subtitle, badge, children }: { title: string; subtitle?: string; badge?: React.ReactNode; children: React.ReactNode }) {
+function IconText({ icon, children }: { icon: SvgIconName; children: React.ReactNode }) {
+  return <span className="inline-flex items-center gap-2"><SvgIcon name={icon} size={16} aria-hidden="true" />{children}</span>;
+}
+
+function Card({ title, subtitle, badge, children }: { title: React.ReactNode; subtitle?: string; badge?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
       <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between gap-2">
@@ -206,7 +211,7 @@ export default function Admin() {
   const saveChanges = () => {
     updateSettings(draft);
     setUnsavedTabs(new Set());
-    toast({ title: "Tersimpan ✓", description: "Perubahan berhasil disimpan" });
+    toast({ title: "Tersimpan", description: "Perubahan berhasil disimpan" });
   };
 
   const cancelChanges = () => {
@@ -368,7 +373,7 @@ export default function Admin() {
                     color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
                   }}
                 >
-                  <span>{tab.icon}</span>
+                  <SvgIcon name={tab.icon} size={14} aria-hidden="true" />
                   <span className="hidden sm:inline">{tab.label}</span>
                   {isBadge && (
                     <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>
@@ -438,10 +443,10 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
   const unread = messages.filter(m => !m.read).length;
 
   const statCards = [
-    { label: "Total Kunjungan", value: stats?.total ?? "—", icon: "👁️", color: "#3b82f6" },
-    { label: "Hari Ini",        value: stats?.today ?? "—", icon: "📅", color: "#10b981" },
-    { label: "Hari Aktif",      value: stats?.history?.filter(h => h.count > 0).length ?? "—", icon: "🗓️", color: "#f59e0b" },
-    { label: "Pesan Masuk",     value: messages.length,     icon: "✉️", color: "#8b5cf6", badge: unread > 0 ? unread : undefined },
+    { label: "Total Kunjungan", value: stats?.total ?? "—", icon: "eye" as SvgIconName, color: "#3b82f6" },
+    { label: "Hari Ini",        value: stats?.today ?? "—", icon: "calendar" as SvgIconName, color: "#10b981" },
+    { label: "Hari Aktif",      value: stats?.history?.filter(h => h.count > 0).length ?? "—", icon: "calendar-range" as SvgIconName, color: "#f59e0b" },
+    { label: "Pesan Masuk",     value: messages.length,     icon: "mail" as SvgIconName, color: "#8b5cf6", badge: unread > 0 ? unread : undefined },
   ];
 
   const markRead = async (id: string) => {
@@ -455,7 +460,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
     await Promise.all(unreadIds.map(id =>
       fetch(`/api/messages/${id}/read`, { method: "PATCH", headers: { "X-Admin-Token": getAdminToken() } })
     ));
-    toast({ title: "Semua pesan ditandai dibaca ✓" });
+    toast({ title: "Semua pesan ditandai dibaca" });
   };
 
   const deleteMsg = async (id: string) => {
@@ -487,7 +492,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
             className="rounded-xl p-4 relative" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}
             data-testid={`stat-card-${i}`}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xl">{s.icon}</span>
+              <SvgIcon name={s.icon} size={22} className="text-foreground/80" aria-hidden="true" />
               <div className="w-2 h-2 rounded-full" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} />
             </div>
             <p className="text-2xl font-bold text-foreground tabular-nums">{s.value}</p>
@@ -503,7 +508,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Visit history */}
       {stats?.history && stats.history.length > 0 && (
-        <Card title="📈 Riwayat Kunjungan" subtitle="30 hari terakhir (scroll)">
+        <Card title={<IconText icon="activity">Riwayat Kunjungan</IconText>} subtitle="30 hari terakhir (scroll)">
           <div className="space-y-2">
             {stats.history.slice(-14).reverse().map(h => (
               <div key={h.date} className="flex items-center gap-2.5">
@@ -524,12 +529,12 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Messages */}
       <Card
-        title="📬 Pesan Masuk"
+        title={<IconText icon="inbox">Pesan Masuk</IconText>}
         subtitle={`${unread} belum dibaca dari ${messages.length} total`}
         badge={unread > 0 ? (
           <button onClick={markAllRead} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold"
             style={{ background: "rgba(59,130,246,0.1)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.2)" }}>
-            ✓ Tandai semua dibaca
+            <span className="inline-flex items-center gap-1"><SvgIcon name="check" size={12} aria-hidden="true" />Tandai semua dibaca</span>
           </button>
         ) : undefined}
       >
@@ -550,7 +555,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
         {filteredMsgs.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-3xl mb-2">{messages.length === 0 ? "📭" : "✅"}</p>
+            <div className="flex justify-center mb-2 text-blue-400">{messages.length === 0 ? <SvgIcon name="inbox" size={30} /> : <SvgIcon name="check-circle" size={30} />}</div>
             <p className="text-xs text-muted-foreground">{messages.length === 0 ? "Belum ada pesan masuk" : "Semua pesan sudah dibaca"}</p>
           </div>
         ) : (
@@ -602,7 +607,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Language stats */}
       {langStats.length > 0 && (
-        <Card title="💻 Statistik Kode" subtitle="Distribusi bahasa sumber kode">
+        <Card title={<IconText icon="code">Statistik Kode</IconText>} subtitle="Distribusi bahasa sumber kode">
           <div className="space-y-2.5">
             {langStats.map(s => (
               <div key={s.language} className="flex items-center gap-2.5">
@@ -635,7 +640,7 @@ function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="🏠 Pengaturan Beranda">
+    <Card title={<IconText icon="home">Pengaturan Beranda</IconText>}>
       <div className="space-y-4">
         <Field label="URL Foto Profil">
           <input value={draft.photoUrl || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, photoUrl: e.target.value }))} className={inputCls} data-testid="admin-photo-url" placeholder="https://..." />
@@ -665,7 +670,7 @@ function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
         </Field>
 
         <div className="p-3.5 rounded-xl bg-accent/30 border border-border/50 space-y-3">
-          <p className="text-xs text-muted-foreground font-semibold">💡 Ketik teks ID, klik ID→EN untuk terjemahkan otomatis</p>
+          <p className="text-xs text-muted-foreground font-semibold inline-flex items-center gap-2"><SvgIcon name="lightbulb" size={14} aria-hidden="true" />Ketik teks ID, klik ID→EN untuk terjemahkan otomatis</p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Status Teks" hint="ID" row={<TranslateBtn loading={!!trLoading.statusTexts} onClick={() => translate("statusTexts", draft.statusTexts?.id?.join(", ") || "")} />}>
               <textarea rows={3} value={draft.statusTexts?.id?.join("\n") || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, statusTexts: { ...d.statusTexts, id: e.target.value.split("\n").map((s: string) => s.trim()).filter(Boolean) } }))} className={inputCls + " resize-none"} placeholder="Satu per baris..." />
@@ -697,7 +702,7 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="👤 Pengaturan Tentang">
+    <Card title={<IconText icon="user">Pengaturan Tentang</IconText>}>
       <div className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Tanggal Lahir">
@@ -714,7 +719,7 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
         </Field>
 
         <div className="p-3.5 rounded-xl bg-accent/30 border border-border/50 space-y-3">
-          <p className="text-xs text-muted-foreground font-semibold">💡 Klik ID→EN untuk terjemahkan deskripsi otomatis</p>
+          <p className="text-xs text-muted-foreground font-semibold inline-flex items-center gap-2"><SvgIcon name="lightbulb" size={14} aria-hidden="true" />Klik ID→EN untuk terjemahkan deskripsi otomatis</p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading.aboutDesc} onClick={() => translate("aboutDesc", draft.aboutDesc?.id || "")} />}>
               <textarea rows={4} value={draft.aboutDesc?.id || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, aboutDesc: { ...d.aboutDesc, id: e.target.value } }))} className={inputCls + " resize-none"} />
@@ -733,9 +738,9 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
 
 // ── Tech Tab ───────────────────────────────────────────────────────────────────
 const CAT_META = {
-  programming: { label: "🧠 Programming", color: "#3b82f6" },
-  framework:   { label: "⚡ Framework & Library", color: "#6366f1" },
-  tools:       { label: "🔧 Tools & Platform", color: "#10b981" }
+  programming: { label: "Programming", icon: "code" as SvgIconName, color: "#3b82f6" },
+  framework:   { label: "Framework & Library", icon: "zap" as SvgIconName, color: "#6366f1" },
+  tools:       { label: "Tools & Platform", icon: "wrench" as SvgIconName, color: "#10b981" }
 } as const;
 
 function TechTab({ draft, setDraft, onSave, onCancel }: any) {
@@ -754,7 +759,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
     }
     setDraft((d: PortfolioSettings) => ({ ...d, techStack: { ...d.techStack, [addCat]: [...existing, name] } }));
     setAddName("");
-    toast({ title: `Ditambahkan ke ${addCat} ✓`, description: `"${name}"` });
+    toast({ title: `Ditambahkan ke ${addCat}`, description: `"${name}"` });
   };
 
   const removeTech = (cat: string, name: string) => {
@@ -777,15 +782,15 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
   return (
     <div className="space-y-4">
-      <Card title="➕ Tambah Teknologi" subtitle="Nama sesuai library tech-stack-icons">
+      <Card title={<IconText icon="plus">Tambah Teknologi</IconText>} subtitle="Nama sesuai library tech-stack-icons">
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            {(Object.entries(CAT_META) as [string, { label: string; color: string }][]).map(([key, meta]) => (
+            {(Object.entries(CAT_META) as [string, { label: string; icon: SvgIconName; color: string }][]).map(([key, meta]) => (
               <button key={key} onClick={() => setAddCat(key as any)}
                 className="flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all"
                 style={{ background: addCat === key ? `${meta.color}18` : "hsl(var(--accent)/0.5)", border: `1.5px solid ${addCat === key ? meta.color : "transparent"}`, color: addCat === key ? meta.color : "hsl(var(--muted-foreground))" }}
                 data-testid={`cat-select-${key}`}>
-                <span className="text-lg">{meta.label.split(" ")[0]}</span>
+                <SvgIcon name={meta.icon} size={18} aria-hidden="true" />
                 <span className="text-[10px]">{key}</span>
               </button>
             ))}
@@ -793,7 +798,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
           <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "hsl(var(--accent)/0.4)", border: "1px solid hsl(var(--border)/0.6)" }}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
-              {addName.trim() ? <StackIcon name={addName.trim().toLowerCase()} variant="dark" className="w-5 h-5" /> : <span className="text-lg opacity-30">?</span>}
+              {addName.trim() ? <StackIcon name={addName.trim().toLowerCase()} variant="dark" className="w-5 h-5" /> : <SvgIcon name="code" size={18} className="opacity-30" aria-hidden="true" />}
             </div>
             <input
               dir="ltr"
@@ -805,7 +810,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
               className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground/50"
               autoComplete="off" autoCorrect="off" spellCheck={false}
             />
-            {addName && <button onClick={() => setAddName("")} className="text-muted-foreground/60 hover:text-foreground text-xs flex-shrink-0">✕</button>}
+            {addName && <button onClick={() => setAddName("")} className="text-muted-foreground/60 hover:text-foreground text-xs flex-shrink-0" aria-label="Kosongkan nama teknologi"><SvgIcon name="x" size={14} /></button>}
           </div>
 
           <motion.button
@@ -825,9 +830,9 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
       {/* Search */}
       <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="text-muted-foreground flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <SvgIcon name="search" size={14} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />
         <input dir="ltr" value={search} onChange={e => setSearch(e.target.value)} placeholder={`Cari dari ${totalCount} teknologi...`} className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground/50" data-testid="tech-search-input" />
-        {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-foreground text-xs">✕</button>}
+        {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-foreground text-xs" aria-label="Hapus pencarian"><SvgIcon name="x" size={14} /></button>}
       </div>
 
       {/* Tech lists */}
@@ -836,7 +841,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
         const items = all.filter((n: string) => !search || n.toLowerCase().includes(search.toLowerCase()));
         const meta = CAT_META[cat];
         return (
-          <Card key={cat} title={meta.label} subtitle={`${all.length} item${items.length !== all.length ? ` · ${items.length} cocok` : ""}`}>
+          <Card key={cat} title={<IconText icon={meta.icon}>{meta.label}</IconText>} subtitle={`${all.length} item${items.length !== all.length ? ` · ${items.length} cocok` : ""}`}>
             {items.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-3">{search ? "Tidak ada yang cocok" : "Belum ada teknologi"}</p>
             ) : (
@@ -1013,7 +1018,7 @@ function FriendsTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="👥 Daftar Teman" subtitle={`${draft.friends.length} teman terdaftar`}>
+    <Card title={<IconText icon="users">Daftar Teman</IconText>} subtitle={`${draft.friends.length} teman terdaftar`}>
       <div className="space-y-4">
         <div className="flex gap-2">
           <input value={newFriend} onChange={e => setNewFriend(e.target.value)} onKeyDown={e => e.key === "Enter" && addFriend()}
@@ -1051,23 +1056,23 @@ function FriendsTab({ draft, setDraft, onSave, onCancel }: any) {
 }
 
 // ── Social Tab ─────────────────────────────────────────────────────────────────
-const SOCIALS = [
-  { key: "github", label: "GitHub", icon: "🐙", ph: "https://github.com/..." },
-  { key: "instagram", label: "Instagram", icon: "📸", ph: "https://instagram.com/..." },
-  { key: "facebook", label: "Facebook", icon: "📘", ph: "https://facebook.com/..." },
-  { key: "youtube", label: "YouTube", icon: "▶️", ph: "https://youtube.com/@..." },
-  { key: "telegram", label: "Telegram", icon: "✈️", ph: "https://t.me/..." },
-  { key: "discord", label: "Discord", icon: "💬", ph: "https://discord.gg/..." },
-  { key: "email", label: "Email", icon: "📧", ph: "nama@email.com" },
+const SOCIALS: { key: string; label: string; icon: SvgIconName; ph: string }[] = [
+  { key: "github", label: "GitHub", icon: "github", ph: "https://github.com/..." },
+  { key: "instagram", label: "Instagram", icon: "instagram", ph: "https://instagram.com/..." },
+  { key: "facebook", label: "Facebook", icon: "link", ph: "https://facebook.com/..." },
+  { key: "youtube", label: "YouTube", icon: "youtube", ph: "https://youtube.com/@..." },
+  { key: "telegram", label: "Telegram", icon: "send", ph: "https://t.me/..." },
+  { key: "discord", label: "Discord", icon: "message", ph: "https://discord.gg/..." },
+  { key: "email", label: "Email", icon: "mail", ph: "nama@email.com" },
 ];
 
 function SocialTab({ draft, setDraft, onSave, onCancel }: any) {
   return (
-    <Card title="🔗 Media Sosial">
+    <Card title={<IconText icon="link">Media Sosial</IconText>}>
       <div className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           {SOCIALS.map(s => (
-            <Field key={s.key} label={`${s.icon} ${s.label}`}>
+            <Field key={s.key} label={s.label} row={<SvgIcon name={s.icon} size={14} aria-hidden="true" />}>
               <input value={draft.social?.[s.key] || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, social: { ...d.social, [s.key]: e.target.value } }))} placeholder={s.ph} className={inputCls} />
             </Field>
           ))}
@@ -1103,7 +1108,7 @@ function AudioTab({ draft, setDraft, onSave, onCancel }: any) {
   return (
     <div className="space-y-4">
       {draft.playlist.map((track: PlaylistItem, i: number) => (
-        <Card key={track.id} title={`🎵 Lagu ${i + 1}`}>
+        <Card key={track.id} title={<IconText icon="music">Lagu {i + 1}</IconText>}>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex gap-1">
@@ -1183,7 +1188,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       const res = await fetch("/api/admin/change-password", { method: "POST", headers: adminHeaders(), body: JSON.stringify({ newPassword: newPw }) });
       const data = await res.json();
       if (data.ok) {
-        toast({ title: "Password berhasil diubah ✓", description: "Logout otomatis. Login ulang dengan password baru." });
+        toast({ title: "Password berhasil diubah", description: "Logout otomatis. Login ulang dengan password baru." });
         setNewPw(""); setConfirmPw("");
         setTimeout(() => { sessionStorage.removeItem("aka-admin-token"); onLogout(); }, 1500);
       } else {
@@ -1196,7 +1201,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
   const handleReset = () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
     onReset(); setConfirmReset(false);
-    toast({ title: "Reset berhasil ✓", description: "Semua pengaturan dikembalikan ke default" });
+    toast({ title: "Reset berhasil", description: "Semua pengaturan dikembalikan ke default" });
   };
 
   const exportSettings = () => {
@@ -1204,7 +1209,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "aka-settings.json"; a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Diekspor ✓" });
+    toast({ title: "Diekspor" });
   };
 
   const importSettings = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1214,7 +1219,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       try {
         const parsed = JSON.parse(ev.target?.result as string);
         setDraft((d: any) => ({ ...d, ...parsed }));
-        toast({ title: "Diimpor ✓", description: "Review lalu simpan perubahan" });
+        toast({ title: "Diimpor", description: "Review lalu simpan perubahan" });
       } catch { toast({ title: "File tidak valid", variant: "destructive" }); }
     };
     reader.readAsText(file);
@@ -1232,9 +1237,9 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
     setTestEmailLoading(false);
   };
 
-  const sectionLabels: Record<string, string> = {
-    about: "👤 Tentang", timeline: "📅 Pendidikan", stack: "💻 Tech Stack",
-    projects: "💼 Proyek", friends: "👥 Teman", social: "🔗 Sosial Media", contact: "✉️ Kontak"
+  const sectionLabels: Record<string, React.ReactNode> = {
+    about: <IconText icon="user">Tentang</IconText>, timeline: <IconText icon="calendar">Pendidikan</IconText>, stack: <IconText icon="code">Tech Stack</IconText>,
+    projects: <IconText icon="briefcase">Proyek</IconText>, friends: <IconText icon="users">Teman</IconText>, social: <IconText icon="link">Sosial Media</IconText>, contact: <IconText icon="mail">Kontak</IconText>
   };
 
   return (
@@ -1251,7 +1256,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             Lihat Situs
           </a>
-          <button onClick={() => { navigator.clipboard?.writeText(window.location.origin).then(() => toast({ title: "URL disalin ✓" })); }}
+          <button onClick={() => { navigator.clipboard?.writeText(window.location.origin).then(() => toast({ title: "URL disalin" })); }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Salin URL
@@ -1260,7 +1265,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </div>
 
       {/* Section visibility */}
-      <Card title="👁️ Visibilitas Seksi" subtitle="Tampilkan/sembunyikan seksi di portfolio">
+      <Card title={<IconText icon="eye">Visibilitas Seksi</IconText>} subtitle="Tampilkan/sembunyikan seksi di portfolio">
         <div className="space-y-2">
           {Object.entries(sectionLabels).map(([key, label]) => {
             const isVisible = draft.sectionVisibility?.[key] !== false;
@@ -1282,11 +1287,11 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Education timeline */}
-      <Card title="🏫 Editor Pendidikan" subtitle="Edit nama sekolah dan tahun">
+      <Card title={<IconText icon="school">Editor Pendidikan</IconText>} subtitle="Edit nama sekolah dan tahun">
         <div className="space-y-3">
-          {([{ key: "sd", icon: "📚", label: "SD" }, { key: "mts", icon: "📖", label: "MTs / SMP" }, { key: "sma", icon: "🎓", label: "SMA / SMK" }] as const).map(({ key, icon, label }) => (
+          {([{ key: "sd", label: "SD" }, { key: "mts", label: "MTs / SMP" }, { key: "sma", label: "SMA / SMK" }] as const).map(({ key, label }) => (
             <div key={key} className="p-3 rounded-xl bg-accent/30 border border-border/50 space-y-2">
-              <p className="text-xs font-bold text-foreground/70">{icon} {label}</p>
+              <p className="text-xs font-bold text-foreground/70 flex items-center gap-2"><EducationMark level={key} className="w-7 h-7" />{label}</p>
               <div className="grid sm:grid-cols-2 gap-2">
                 <Field label="Nama Sekolah">
                   <input value={draft.timeline?.[key]?.name || ""} onChange={e => setDraft((d: any) => ({ ...d, timeline: { ...d.timeline, [key]: { ...d.timeline?.[key], name: e.target.value } } }))} className={inputCls} />
@@ -1302,7 +1307,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* SEO */}
-      <Card title="🔍 SEO & Meta">
+      <Card title={<IconText icon="search">SEO & Meta</IconText>}>
         <div className="space-y-3">
           <Field label="Judul Halaman">
             <input value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
@@ -1318,7 +1323,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Export/Import */}
-      <Card title="📦 Ekspor / Impor Pengaturan" subtitle="Backup atau restore semua pengaturan">
+      <Card title={<IconText icon="package">Ekspor / Impor Pengaturan</IconText>} subtitle="Backup atau restore semua pengaturan">
         <div className="flex flex-wrap gap-2">
           <motion.button whileTap={{ scale: 0.95 }} onClick={exportSettings} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "white" }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1333,10 +1338,10 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Test Email */}
-      <Card title="📧 Test Email" subtitle="Verifikasi konfigurasi email (Gmail)">
+      <Card title={<IconText icon="mail">Test Email</IconText>} subtitle="Verifikasi konfigurasi email (Gmail)">
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
-            <span>ℹ️</span>
+            <SvgIcon name="info" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
             <span className="text-muted-foreground">Kirim email percobaan ke <strong>EMAIL_RECIPIENT</strong> untuk memastikan konfigurasi Gmail berjalan dengan benar.</span>
           </div>
           <motion.button whileTap={{ scale: 0.96 }} onClick={testEmail} disabled={testEmailLoading} data-testid="test-email-btn"
@@ -1353,7 +1358,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="p-3 rounded-xl text-xs flex items-center gap-2"
                 style={{ background: testEmailResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)", border: `1px solid ${testEmailResult.ok ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}` }}>
-                <span>{testEmailResult.ok ? "✅" : "❌"}</span>
+                <SvgIcon name={testEmailResult.ok ? "circle-check" : "circle-x"} size={16} className={testEmailResult.ok ? "text-green-500" : "text-red-500"} aria-hidden="true" />
                 <span style={{ color: testEmailResult.ok ? "#22c55e" : "#ef4444" }}>{testEmailResult.msg}</span>
               </motion.div>
             )}
@@ -1362,10 +1367,10 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Change password */}
-      <Card title="🔑 Ganti Password Admin" subtitle="Password diverifikasi oleh server">
+      <Card title={<IconText icon="key">Ganti Password Admin</IconText>} subtitle="Password diverifikasi oleh server">
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
-            <span>🛡️</span>
+            <SvgIcon name="shield" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
             <span className="text-muted-foreground">Password tersimpan <strong>di server</strong>, tidak di browser. Untuk perubahan permanen di Vercel, set env var <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di dashboard Vercel.</span>
           </div>
 
@@ -1409,7 +1414,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             <div className="flex items-center gap-1.5 text-xs">
               <div className={`w-1.5 h-1.5 rounded-full ${newPw === confirmPw ? "bg-green-500" : "bg-red-500"}`} />
               <span className={newPw === confirmPw ? "text-green-500" : "text-red-400"}>
-                {newPw === confirmPw ? "Password cocok ✓" : "Password tidak cocok"}
+                {newPw === confirmPw ? "Password cocok" : "Password tidak cocok"}
               </span>
             </div>
           )}
@@ -1429,13 +1434,13 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Reset */}
-      <Card title="🔁 Reset Pengaturan" subtitle="Kembalikan semua ke nilai default">
+      <Card title={<IconText icon="reset">Reset Pengaturan</IconText>} subtitle="Kembalikan semua ke nilai default">
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Semua perubahan akan hilang dan kembali ke pengaturan bawaan. Tindakan ini tidak dapat dibatalkan.</p>
           <motion.button whileTap={{ scale: 0.95 }} onClick={handleReset} data-testid="admin-reset"
             className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
             style={{ background: confirmReset ? "hsl(var(--destructive))" : "hsl(var(--destructive)/0.1)", color: confirmReset ? "white" : "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
-            {confirmReset ? "⚠️ Klik lagi untuk konfirmasi" : "Reset ke Default"}
+            {confirmReset ? <span className="inline-flex items-center gap-1.5"><SvgIcon name="alert" size={14} aria-hidden="true" />Klik lagi untuk konfirmasi</span> : "Reset ke Default"}
           </motion.button>
         </div>
       </Card>

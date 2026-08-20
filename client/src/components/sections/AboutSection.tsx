@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 import { calculateAge } from "@/lib/config";
+import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
 
 export default function AboutSection() {
   const { t, lang } = useLang();
@@ -9,9 +10,9 @@ export default function AboutSection() {
   const age = calculateAge(settings.birthDate);
 
   const cards = [
-    { id: "age", icon: "🎂", label: t.about.age, value: lang === "id" ? `${age} Tahun` : `${age} Years Old` },
-    { id: "origin", icon: "📍", label: t.about.origin, value: settings.origin },
-    { id: "school", icon: "🏫", label: t.about.school, value: settings.school }
+    { id: "age", icon: "cake" as SvgIconName, label: t.about.age, value: lang === "id" ? `${age} Tahun` : `${age} Years Old` },
+    { id: "origin", icon: "map-pin" as SvgIconName, label: t.about.origin, value: settings.origin },
+    { id: "school", icon: "school" as SvgIconName, label: t.about.school, value: settings.school }
   ];
 
   return (
@@ -43,7 +44,7 @@ export default function AboutSection() {
               style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}
               data-testid={`about-card-${card.id}`}
             >
-              <span className="text-lg">{card.icon}</span>
+              <span className="text-blue-400" aria-hidden="true"><SvgIcon name={card.icon} size={20} /></span>
               <div>
                 <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">{card.label}</p>
                 <p className="text-xs font-semibold text-card-foreground leading-snug">{card.value}</p>

@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 import { PORTFOLIO_CONFIG } from "@/lib/config";
+import { SvgIcon } from "@/components/SvgIcon";
 
 export default function Footer() {
   const { t } = useLang();
@@ -30,7 +31,7 @@ export default function Footer() {
             {settings.footerText || "© 2026 Aka"}
           </span>
         </p>
-        <p className="text-xs text-muted-foreground/50">{t.footer.built}</p>
+        <p className="text-xs text-muted-foreground/50 inline-flex items-center justify-center gap-1 w-full"><span>{t.footer.built}</span><SvgIcon name="heart" size={12} className="text-rose-400" /></p>
       </div>
     </footer>
   );

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
+import { EducationMark } from "@/components/SvgIcon";
 
 interface PopupInfo {
   id: string;
@@ -23,9 +24,9 @@ export default function TimelineSection() {
   const lastTouchRef = useRef(0);
 
   const items = [
-    { id: "sd", label: t.timeline.sd, name: tl?.sd?.name || t.timeline.sdName, year: tl?.sd?.year || t.timeline.sdYear, icon: "📚", color: "from-emerald-400 to-green-500" },
-    { id: "mts", label: t.timeline.mts, name: tl?.mts?.name || t.timeline.mtsName, year: tl?.mts?.year || t.timeline.mtsYear, icon: "📖", color: "from-blue-400 to-blue-600" },
-    { id: "sma", label: t.timeline.sma, name: tl?.sma?.name || t.timeline.smaName, year: tl?.sma?.year || t.timeline.smaYear, icon: "🎓", color: "from-violet-400 to-purple-600" }
+    { id: "sd", label: t.timeline.sd, name: tl?.sd?.name || t.timeline.sdName, year: tl?.sd?.year || t.timeline.sdYear, level: "sd" as const, color: "from-emerald-400 to-green-500" },
+    { id: "mts", label: t.timeline.mts, name: tl?.mts?.name || t.timeline.mtsName, year: tl?.mts?.year || t.timeline.mtsYear, level: "mts" as const, color: "from-blue-400 to-blue-600" },
+    { id: "sma", label: t.timeline.sma, name: tl?.sma?.name || t.timeline.smaName, year: tl?.sma?.year || t.timeline.smaYear, level: "sma" as const, color: "from-violet-400 to-purple-600" }
   ];
 
   const startAutoScroll = useCallback(() => {
@@ -109,8 +110,8 @@ export default function TimelineSection() {
                     style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
                     data-testid={`timeline-${item.id}`}
                   >
-                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${item.color} flex items-center justify-center text-lg mx-auto mb-2.5`}>
-                      {item.icon}
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center mx-auto mb-2.5`}>
+                      <EducationMark level={item.level} label={`${item.label}: ${item.name}`} className="w-10 h-10" />
                     </div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-1">{item.label}</p>
                     <p className="text-xs font-semibold text-card-foreground leading-snug">{item.name}</p>

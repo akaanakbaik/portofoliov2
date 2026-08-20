@@ -82,8 +82,8 @@ export const PORTFOLIO_CONFIG = {
       name: "Profile Card",
       image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/profilecard.jpg",
       desc: {
-        id: "Web profilecard, web pertama tapi template sih 🗿",
-        en: "Profile card website, my first web but it's a template 🗿"
+        id: "Web profilecard, web pertama tapi masih menggunakan template",
+        en: "Profile card website, my first web built from a template"
       },
       url: "https://profile-card-simpel-git-main-akas-projects-128b7fd7.vercel.app/",
       buttonType: "view"

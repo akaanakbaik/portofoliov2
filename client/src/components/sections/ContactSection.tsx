@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SvgIcon } from "@/components/SvgIcon";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +71,7 @@ export default function ContactSection() {
           <AnimatePresence mode="wait">
             {sent ? (
               <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="py-10 text-center space-y-3" role="status" aria-live="polite">
-                <div className="text-4xl" aria-hidden="true">✓</div>
+                <div className="text-emerald-400" aria-hidden="true"><SvgIcon name="check-circle" size={40} /></div>
                 <p className="text-base font-bold text-foreground">{t.contact.successTitle}</p>
                 <p className="text-xs text-muted-foreground">{t.contact.successDesc}</p>
                 <button type="button" onClick={() => setSent(false)} className="text-xs font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">{lang === "id" ? "Kirim pesan lain" : "Send another message"}</button>
