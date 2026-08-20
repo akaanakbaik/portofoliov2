@@ -6,7 +6,8 @@ import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
-import { EducationMark, SvgIcon, type SvgIconName } from "@/components/SvgIcon";
+import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
+import { SchoolLogo } from "@/components/SchoolLogo";
 
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 const getAdminToken = () => sessionStorage.getItem("aka-admin-token") || "";
@@ -1291,7 +1292,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
         <div className="space-y-3">
           {([{ key: "sd", label: "SD" }, { key: "mts", label: "MTs / SMP" }, { key: "sma", label: "SMA / SMK" }] as const).map(({ key, label }) => (
             <div key={key} className="p-3 rounded-xl bg-accent/30 border border-border/50 space-y-2">
-              <p className="text-xs font-bold text-foreground/70 flex items-center gap-2"><EducationMark level={key} className="w-7 h-7" />{label}</p>
+              <p className="text-xs font-bold text-foreground/70 flex items-center gap-2"><SchoolLogo level={key} alt={label} className="w-8 h-8 rounded-lg bg-white p-0.5" />{label}</p>
               <div className="grid sm:grid-cols-2 gap-2">
                 <Field label="Nama Sekolah">
                   <input value={draft.timeline?.[key]?.name || ""} onChange={e => setDraft((d: any) => ({ ...d, timeline: { ...d.timeline, [key]: { ...d.timeline?.[key], name: e.target.value } } }))} className={inputCls} />
