@@ -15,7 +15,7 @@ export default function FriendsSection() {
 
   const animate = useCallback(() => {
     if (scrollRef.current && !isPausedRef.current && !shouldReduceMotion) {
-      posRef.current += 0.45;
+      posRef.current += 0.55;
       const max = scrollRef.current.scrollWidth / 2;
       if (posRef.current >= max) posRef.current = 0;
       scrollRef.current.scrollLeft = posRef.current;
@@ -65,7 +65,7 @@ export default function FriendsSection() {
         <div className="relative">
           <div className="absolute left-0 top-0 bottom-0 w-12 z-10 pointer-events-none bg-gradient-to-r from-background to-transparent" aria-hidden="true" />
           <div className="absolute right-0 top-0 bottom-0 w-12 z-10 pointer-events-none bg-gradient-to-l from-background to-transparent" aria-hidden="true" />
-          <div ref={scrollRef} className={`flex gap-2.5 overflow-x-auto py-3 px-4 ${shouldReduceMotion ? "flex-wrap justify-center overflow-visible" : "[scrollbar-width:none]"}`} onMouseEnter={pause} onMouseLeave={resume} onTouchStart={pause} onTouchEnd={resume} aria-label={t.friends.title}>
+          <div ref={scrollRef} className={`flex gap-2.5 overflow-x-auto py-3 px-4 ${shouldReduceMotion ? "flex-wrap justify-center overflow-visible" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"}`} onMouseEnter={pause} onMouseLeave={resume} onTouchStart={pause} onTouchEnd={resume} onFocus={pause} onBlur={resume} tabIndex={0} data-auto-scroll={!shouldReduceMotion} aria-label={t.friends.title}>
             <div className="flex gap-2.5" role="list">
               {settings.friends.map((friend, i) => <div key={`primary-${friend}-${i}`} role="listitem">{renderFriend(friend, i)}</div>)}
             </div>
