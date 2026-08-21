@@ -88,7 +88,6 @@ export default function FriendsSection() {
           <div
             ref={scrollRef}
             className={`flex gap-2.5 overflow-x-auto py-3 px-4 ${shouldReduceMotion ? "flex-wrap justify-center overflow-visible" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"}`}
-            onScroll={syncManualPosition}
             onPointerDown={pause}
             onPointerUp={scheduleResume}
             onPointerCancel={scheduleResume}
