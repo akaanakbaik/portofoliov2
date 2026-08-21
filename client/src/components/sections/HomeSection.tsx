@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 
@@ -7,6 +7,12 @@ export default function HomeSection() {
   const { lang } = useLang();
   const { settings } = usePortfolio();
   const shouldReduceMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
+  const parallaxIntensity = Math.min(Math.max(settings.motion?.parallaxIntensity ?? 0.35, 0), 0.75);
+  const parallaxEnabled = settings.motion?.parallaxEnabled !== false && !shouldReduceMotion;
+  const contentY = useTransform(scrollYProgress, [0, 0.24], [0, -72 * parallaxIntensity]);
+  const glowY = useTransform(scrollYProgress, [0, 0.3], [0, 110 * parallaxIntensity]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0.78]);
   const statuses = settings.statusTexts[lang] || settings.statusTexts.id;
   const [displayText, setDisplayText] = useState("");
   const [statusIndex, setStatusIndex] = useState(0);
@@ -45,7 +51,7 @@ export default function HomeSection() {
       className="flex items-center justify-center relative overflow-hidden scroll-mt-20"
       style={{ minHeight: "calc(100vh - 3.5rem)", marginTop: "3.5rem" }}
     >
-      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+      <motion.div className="absolute inset-0 pointer-events-none" aria-hidden="true" style={{ y: parallaxEnabled ? glowY : 0 }}>
         {!shouldReduceMotion && <>
           <motion.div
             animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] }}
@@ -60,9 +66,9 @@ export default function HomeSection() {
             style={{ background: "radial-gradient(circle, hsl(250 70% 65% / 0.3), transparent 70%)", filter: "blur(70px)", willChange: "transform, opacity" }}
           />
         </>}
-      </div>
+      </motion.div>
 
-      <div className="relative z-10 text-center px-4 max-w-2xl mx-auto py-16">
+      <motion.div className="relative z-10 text-center px-4 max-w-2xl mx-auto py-16" style={{ y: parallaxEnabled ? contentY : 0, opacity: parallaxEnabled ? heroOpacity : 1 }}>
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.7, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -132,7 +138,7 @@ export default function HomeSection() {
           <span className="text-sm md:text-base font-medium" style={{ color: "hsl(217 91% 62%)" }}>{displayText}</span>
           {!shouldReduceMotion && <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }} style={{ color: "hsl(217 91% 62%)" }} className="font-light">|</motion.span>}
         </motion.div>
-      </div>
+      </motion.div>
     </section>
   );
 }

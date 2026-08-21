@@ -137,6 +137,7 @@ export default function Admin() {
 
   // Unsaved changes tracker
   const [unsavedTabs, setUnsavedTabs] = useState<Set<Tab>>(new Set());
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const fetchAnalytics = useCallback(async () => {
     setRefreshing(true);
@@ -172,6 +173,17 @@ export default function Admin() {
     setDraft({ ...settings });
     setUnsavedTabs(new Set());
   }, [settings]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (unsavedTabs.size > 0) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [unsavedTabs.size]);
 
   // Track unsaved changes per tab
   const handleDraftChange = (updater: (d: PortfolioSettings) => PortfolioSettings) => {
@@ -212,6 +224,7 @@ export default function Admin() {
   const saveChanges = () => {
     updateSettings(draft);
     setUnsavedTabs(new Set());
+    setLastSavedAt(new Date());
     toast({ title: "Tersimpan", description: "Perubahan berhasil disimpan" });
   };
 
@@ -219,6 +232,11 @@ export default function Admin() {
     setDraft({ ...settings });
     setUnsavedTabs(new Set());
     toast({ title: "Dibatalkan" });
+  };
+
+  const saveAllChanges = () => {
+    if (unsavedTabs.size === 0) return;
+    saveChanges();
   };
 
   // ── Session loading screen ────────────────────────────────────────────────
@@ -341,8 +359,15 @@ export default function Admin() {
                 <p className="text-[10px] text-muted-foreground leading-tight">Portfolio aka</p>
               </div>
             </div>
-            <div className="flex gap-1.5">
-              <button onClick={() => navigate("/")} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+              <div className="flex items-center gap-1.5">
+                {unsavedTabs.size > 0 && (
+                  <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Belum disimpan
+                  </div>
+                )}
+                {lastSavedAt && unsavedTabs.size === 0 && <span className="hidden lg:inline text-[10px] text-muted-foreground">Tersimpan {lastSavedAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+                {unsavedTabs.size > 0 && <button onClick={saveAllChanges} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>Simpan Semua</button>}
+                <button onClick={() => navigate("/")} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 Portfolio
               </button>
@@ -439,6 +464,8 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterUnread, setFilterUnread] = useState(false);
+  const [messageQuery, setMessageQuery] = useState("");
+  const [sortNewest, setSortNewest] = useState(true);
 
   const maxVisit = stats?.history?.length ? Math.max(...stats.history.map(h => h.count), 1) : 1;
   const unread = messages.filter(m => !m.read).length;
@@ -471,7 +498,27 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
     setDeletingId(null);
   };
 
-  const filteredMsgs = filterUnread ? messages.filter(m => !m.read) : messages;
+  const filteredMsgs = messages
+    .filter(m => !filterUnread || !m.read)
+    .filter(m => !messageQuery.trim() || `${m.name} ${m.email} ${m.message}`.toLowerCase().includes(messageQuery.toLowerCase()))
+    .sort((a, b) => sortNewest ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  const exportMessages = () => {
+    const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const rows = [
+      ["Nama", "Email", "Pesan", "Waktu", "Status"],
+      ...filteredMsgs.map(m => [m.name, m.email, m.message, new Date(m.timestamp).toLocaleString("id-ID"), m.read ? "Dibaca" : "Belum dibaca"])
+    ];
+    const csv = rows.map(row => row.map(value => escapeCsv(value)).join(",")).join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aka-messages-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Pesan diekspor", description: `${filteredMsgs.length} pesan masuk ke file CSV` });
+  };
 
   return (
     <div className="space-y-4">
@@ -540,17 +587,32 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
         ) : undefined}
       >
         {messages.length > 0 && (
-          <div className="flex gap-1.5 mb-3">
-            <button onClick={() => setFilterUnread(false)}
+          <div className="space-y-2 mb-3">
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setFilterUnread(false)}
               className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
               style={{ background: !filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: !filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
               Semua ({messages.length})
             </button>
-            <button onClick={() => setFilterUnread(true)}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
-              style={{ background: filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
-              Belum dibaca ({unread})
-            </button>
+              <button onClick={() => setFilterUnread(true)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
+                style={{ background: filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
+                Belum dibaca ({unread})
+              </button>
+              <button onClick={exportMessages} className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+                <span className="inline-flex items-center gap-1"><SvgIcon name="download" size={11} aria-hidden="true" />CSV</span>
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex items-center gap-2 flex-1 px-2.5 py-1.5 rounded-lg bg-accent/50 border border-border/50">
+                <SvgIcon name="search" size={12} className="text-muted-foreground" aria-hidden="true" />
+                <input value={messageQuery} onChange={e => setMessageQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent outline-none text-xs text-foreground placeholder:text-muted-foreground" placeholder="Cari nama, email, atau pesan..." aria-label="Cari pesan masuk" />
+              </div>
+              <select value={sortNewest ? "newest" : "oldest"} onChange={e => setSortNewest(e.target.value === "newest")} className="px-2 rounded-lg bg-accent text-xs text-accent-foreground outline-none" aria-label="Urutkan pesan">
+                <option value="newest">Terbaru</option>
+                <option value="oldest">Terlama</option>
+              </select>
+            </div>
           </div>
         )}
 
@@ -1308,17 +1370,46 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* SEO */}
-      <Card title={<IconText icon="search">SEO & Meta</IconText>}>
+      <Card title={<IconText icon="search">SEO & Meta</IconText>} subtitle="Optimalkan snippet pencarian dan social preview">
         <div className="space-y-3">
-          <Field label="Judul Halaman">
-            <input value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
+          <Field label="Judul Halaman" hint={`${(draft.seo?.title || "").length}/60`}>
+            <input maxLength={60} value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
           </Field>
-          <Field label="Deskripsi Meta">
-            <textarea rows={2} value={draft.seo?.description || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className={inputCls + " resize-none"} />
+          <Field label="Deskripsi Meta" hint={`${(draft.seo?.description || "").length}/160`}>
+            <textarea maxLength={160} rows={2} value={draft.seo?.description || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className={inputCls + " resize-none"} />
           </Field>
+          <Field label="Keywords" hint="pisahkan dengan koma">
+            <input value={draft.seo?.keywords || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, keywords: e.target.value } }))} className={inputCls} placeholder="portfolio, developer, Sumatera Barat" />
+          </Field>
+          <Field label="Canonical URL">
+            <input type="url" value={draft.seo?.canonical || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, canonical: e.target.value } }))} className={inputCls} placeholder="https://akadev.me/" />
+          </Field>
+          <Field label="Open Graph Image URL">
+            <input type="url" value={draft.seo?.ogImage || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, ogImage: e.target.value } }))} className={inputCls} placeholder="https://.../og-image.jpg" />
+          </Field>
+          <div className="rounded-xl p-4 space-y-1.5" style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Preview Google</p>
+            <p className="text-base text-blue-500 line-clamp-1">{draft.seo?.title || "Judul halaman"}</p>
+            <p className="text-xs text-green-600 truncate">{draft.seo?.canonical || "https://akadev.me/"}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{draft.seo?.description || "Deskripsi meta akan tampil di sini."}</p>
+          </div>
           <Field label="Teks Footer">
             <input value={draft.footerText || ""} onChange={e => setDraft((d: any) => ({ ...d, footerText: e.target.value }))} className={inputCls} placeholder="© 2026 Aka" />
           </Field>
+        </div>
+        <SaveBar onSave={onSave} onCancel={onCancel} />
+      </Card>
+
+      <Card title={<IconText icon="zap">Motion & Parallax</IconText>} subtitle="Atur efek scroll hero tanpa mengganggu reduced-motion">
+        <div className="space-y-4">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span><span className="block text-sm font-semibold text-foreground">Aktifkan parallax hero</span><span className="block text-[11px] text-muted-foreground mt-0.5">Otomatis nonaktif jika perangkat meminta reduced motion.</span></span>
+            <input type="checkbox" checked={draft.motion?.parallaxEnabled !== false} onChange={e => setDraft((d: any) => ({ ...d, motion: { ...d.motion, parallaxEnabled: e.target.checked } }))} className="h-4 w-4 accent-blue-500" />
+          </label>
+          <Field label="Intensitas Parallax" hint={`${Math.round((draft.motion?.parallaxIntensity ?? 0.35) * 100)}%`}>
+            <input type="range" min="0" max="0.75" step="0.05" value={draft.motion?.parallaxIntensity ?? 0.35} onChange={e => setDraft((d: any) => ({ ...d, motion: { ...d.motion, parallaxIntensity: Number(e.target.value) } }))} className="w-full accent-blue-500" />
+          </Field>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><SvgIcon name="info" size={14} className="text-blue-400" aria-hidden="true" />Rekomendasi 25–45% untuk menjaga depth visual tetap halus dan ringan.</div>
         </div>
         <SaveBar onSave={onSave} onCancel={onCancel} />
       </Card>
