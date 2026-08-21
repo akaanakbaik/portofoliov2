@@ -2,7 +2,7 @@
 
 > Portfolio personal **aka** (Abdul Khaliq Arrasyid), pelajar kelas 10 & developer muda dari Sumatera Barat, Indonesia.
 
-[![Vercel](https://img.shields.io/badge/Deployed-Vercel-black?logo=vercel)](https://portofoliov2.vercel.app)
+[![Vercel](https://img.shields.io/badge/Deployed-Vercel-black?logo=vercel)](https://akadev.me)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript)](https://typescriptlang.org)
 [![React](https://img.shields.io/badge/React-18-61dafb?logo=react)](https://react.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -261,7 +261,7 @@ EMAIL_RECIPIENT=penerima@gmail.com
 
 ## 🔗 Link
 
-- **Portfolio Live:** [portofoliov2.vercel.app](https://portofoliov2.vercel.app)
+- **Portfolio Live:** [akadev.me](https://akadev.me)
 - **GitHub:** [github.com/akaanakbaik](https://github.com/akaanakbaik)
 
 ---

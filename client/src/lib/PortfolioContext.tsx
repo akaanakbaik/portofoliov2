@@ -14,6 +14,7 @@ export interface ProjectItem {
   desc: { id: string; en: string };
   url: string;
   buttonType: string;
+  imagePosition?: { x: number; y: number };
 }
 
 export interface TechStack {
@@ -56,7 +57,8 @@ export interface PortfolioSettings {
     sma: TimelineEntry;
   };
   footerText: string;
-  seo: { title: string; description: string };
+  seo: { title: string; description: string; keywords: string; ogImage: string; canonical: string };
+  motion: { parallaxEnabled: boolean; parallaxIntensity: number };
 }
 
 interface PortfolioContextType {
@@ -96,7 +98,14 @@ const defaultSettings: PortfolioSettings = {
   footerText: "© 2026 Aka",
   seo: {
     title: "aka — Portfolio",
-    description: "Portfolio Aka, pelajar & developer dari Sumatera Barat Indonesia"
+    description: "Portfolio Aka, pelajar & developer dari Sumatera Barat Indonesia",
+    keywords: "aka, akaanakbaik, portfolio, developer, pelajar, Sumatera Barat, Indonesia, web developer, programming",
+    ogImage: PORTFOLIO_CONFIG.photoUrl,
+    canonical: "https://akadev.me/"
+  },
+  motion: {
+    parallaxEnabled: true,
+    parallaxIntensity: 0.35
   }
 };
 
@@ -117,7 +126,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
           ...parsed,
           sectionVisibility: { ...defaultSettings.sectionVisibility, ...(parsed.sectionVisibility || {}) },
           timeline: { ...defaultSettings.timeline, ...(parsed.timeline || {}) },
-          seo: { ...defaultSettings.seo, ...(parsed.seo || {}) }
+          seo: { ...defaultSettings.seo, ...(parsed.seo || {}) },
+          motion: { ...defaultSettings.motion, ...(parsed.motion || {}) }
         };
       }
     } catch {}

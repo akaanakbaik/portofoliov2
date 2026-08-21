@@ -34,6 +34,7 @@
   --muted-foreground: 210 6% 38%;
   --accent: 210 12% 94%;
   --accent-foreground: 210 6% 16%;
+  --surface-inverse: 210 6% 12%;
   --destructive: 0 72% 32%;
   --destructive-foreground: 0 20% 98%;
   --input: 210 15% 75%;
@@ -118,6 +119,7 @@
   --muted-foreground: 210 6% 65%;
   --accent: 210 10% 17%;
   --accent-foreground: 210 4% 88%;
+  --surface-inverse: 210 6% 12%;
   --destructive: 0 68% 30%;
   --destructive-foreground: 0 20% 98%;
   --input: 210 15% 35%;
@@ -170,8 +172,38 @@
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  :where(a, button, input, textarea, select, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+
+  .surface-inverse-card {
+    background: hsl(var(--surface-inverse));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.24);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

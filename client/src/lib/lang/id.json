@@ -3,8 +3,10 @@
     "home": "Beranda",
     "about": "Tentang",
     "timeline": "Riwayat",
+    "stack": "Stack",
     "projects": "Proyek",
     "friends": "Teman",
+    "social": "Sosial",
     "contact": "Kontak"
   },
   "home": {
@@ -71,7 +73,7 @@
     "errorDesc": "Terjadi kesalahan saat mengirim pesan. Silakan coba lagi."
   },
   "footer": {
-    "built": "Dibuat dengan ❤️ dan kode"
+    "built": "Dibuat dengan kode"
   },
   "admin": {
     "password": "Kata Sandi",

@@ -1,11 +1,18 @@
-import { useEffect, useState, useRef } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 
 export default function HomeSection() {
   const { lang } = useLang();
   const { settings } = usePortfolio();
+  const shouldReduceMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
+  const parallaxIntensity = Math.min(Math.max(settings.motion?.parallaxIntensity ?? 0.35, 0), 0.75);
+  const parallaxEnabled = settings.motion?.parallaxEnabled !== false && !shouldReduceMotion;
+  const contentY = useTransform(scrollYProgress, [0, 0.24], [0, -72 * parallaxIntensity]);
+  const glowY = useTransform(scrollYProgress, [0, 0.3], [0, 110 * parallaxIntensity]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0.78]);
   const statuses = settings.statusTexts[lang] || settings.statusTexts.id;
   const [displayText, setDisplayText] = useState("");
   const [statusIndex, setStatusIndex] = useState(0);
@@ -13,7 +20,11 @@ export default function HomeSection() {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const current = statuses[statusIndex];
+    if (shouldReduceMotion) {
+      setDisplayText(statuses[0] || "");
+      return;
+    }
+    const current = statuses[statusIndex] || "";
     const speed = isDeleting ? 50 : 85;
     if (!isDeleting && displayText === current) {
       timeoutRef.current = setTimeout(() => setIsDeleting(true), 2200);
@@ -21,107 +32,113 @@ export default function HomeSection() {
     }
     if (isDeleting && displayText === "") {
       setIsDeleting(false);
-      setStatusIndex(i => (i + 1) % statuses.length);
+      setStatusIndex(i => (i + 1) % Math.max(statuses.length, 1));
       return;
     }
     timeoutRef.current = setTimeout(() => {
       setDisplayText(isDeleting ? current.slice(0, displayText.length - 1) : current.slice(0, displayText.length + 1));
     }, speed);
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
-  }, [displayText, isDeleting, statusIndex, statuses]);
+  }, [displayText, isDeleting, statusIndex, statuses, shouldReduceMotion]);
+
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: shouldReduceMotion ? "auto" : "smooth", block: "start" });
+  };
 
   return (
     <section
       id="home"
-      className="flex items-center justify-center relative overflow-hidden"
+      className="flex items-center justify-center relative overflow-hidden scroll-mt-20"
       style={{ minHeight: "calc(100vh - 3.5rem)", marginTop: "3.5rem" }}
     >
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <motion.div
-          animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] rounded-full"
-          style={{ background: "radial-gradient(circle, hsl(217 91% 60% / 0.4), transparent 70%)", filter: "blur(80px)", willChange: "transform, opacity" }}
-        />
-        <motion.div
-          animate={{ scale: [1, 1.1, 1], opacity: [0.04, 0.08, 0.04] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 3 }}
-          className="absolute bottom-1/4 -right-1/4 w-[500px] h-[500px] rounded-full"
-          style={{ background: "radial-gradient(circle, hsl(250 70% 65% / 0.3), transparent 70%)", filter: "blur(70px)", willChange: "transform, opacity" }}
-        />
-      </div>
+      <motion.div className="absolute inset-0 pointer-events-none" aria-hidden="true" style={{ y: parallaxEnabled ? glowY : 0 }}>
+        {!shouldReduceMotion && <>
+          <motion.div
+            animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] rounded-full"
+            style={{ background: "radial-gradient(circle, hsl(217 91% 60% / 0.4), transparent 70%)", filter: "blur(80px)", willChange: "transform, opacity" }}
+          />
+          <motion.div
+            animate={{ scale: [1, 1.1, 1], opacity: [0.04, 0.08, 0.04] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 3 }}
+            className="absolute bottom-1/4 -right-1/4 w-[500px] h-[500px] rounded-full"
+            style={{ background: "radial-gradient(circle, hsl(250 70% 65% / 0.3), transparent 70%)", filter: "blur(70px)", willChange: "transform, opacity" }}
+          />
+        </>}
+      </motion.div>
 
-      <div className="relative z-10 text-center px-4 max-w-md mx-auto py-8">
+      <motion.div className="relative z-10 text-center px-4 max-w-2xl mx-auto py-16" style={{ y: parallaxEnabled ? contentY : 0, opacity: parallaxEnabled ? heroOpacity : 1 }}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.7, y: 30 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.7, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-          className="relative inline-block mb-5"
+          className="relative inline-block mb-6"
         >
-          <motion.div
+          {!shouldReduceMotion && <motion.div
             animate={{ opacity: [0.25, 0.6, 0.25] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             className="absolute -inset-4 rounded-full"
             style={{ background: "radial-gradient(circle, hsl(217 91% 58% / 0.18), transparent 70%)", filter: "blur(18px)", willChange: "opacity" }}
-          />
+          />}
           <img
             src={settings.photoUrl}
-            alt={settings.name}
+            alt={`${settings.name}, ${lang === "id" ? "pelajar dan developer web dari Sumatera Barat" : "student and web developer from West Sumatra"}`}
             data-testid="profile-photo"
+            width="144"
+            height="144"
+            fetchPriority="high"
             className="w-28 h-28 md:w-36 md:h-36 rounded-full object-cover object-top relative z-10"
-            style={{
-              border: "2.5px solid hsl(217 91% 60% / 0.4)",
-              boxShadow: "0 0 0 6px hsl(217 91% 60% / 0.06), 0 8px 36px rgba(0,0,0,0.28)"
-            }}
+            style={{ border: "2.5px solid hsl(217 91% 60% / 0.4)", boxShadow: "0 0 0 6px hsl(217 91% 60% / 0.06), 0 8px 36px rgba(0,0,0,0.28)" }}
           />
         </motion.div>
 
         <motion.h1
-          initial={{ opacity: 0, y: 20 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           data-testid="profile-name"
-          className="text-3xl md:text-4xl font-bold mb-3 text-foreground"
-          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: "-0.02em" }}
+          className="text-3xl md:text-5xl font-bold mb-4 text-foreground tracking-tight"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          {settings.name}
+          {settings.name}.
         </motion.h1>
 
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
+        <motion.p
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.48, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-          className="flex items-center justify-center gap-0.5 h-7"
-          data-testid="typing-status"
+          transition={{ delay: 0.42, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+          className="max-w-xl mx-auto text-base md:text-lg leading-relaxed text-muted-foreground"
         >
-          <span className="text-sm md:text-base font-medium" style={{ color: "hsl(217 91% 62%)" }}>
-            {displayText}
-          </span>
-          <motion.span
-            animate={{ opacity: [1, 0, 1] }}
-            transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
-            style={{ color: "hsl(217 91% 62%)" }}
-            className="font-light ml-0.5"
-          >|</motion.span>
+          {lang === "id" ? "Membangun, belajar, dan bereksperimen lewat web." : "Building, learning, and experimenting on the web."}
+        </motion.p>
+
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.54, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center justify-center gap-3 mt-7 flex-wrap"
+        >
+          <button type="button" onClick={() => scrollTo("projects")} className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:brightness-110 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            {lang === "id" ? "Lihat Proyek" : "View Projects"}
+          </button>
+          <button type="button" onClick={() => scrollTo("contact")} className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold border border-border bg-background/70 text-foreground hover:bg-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            {lang === "id" ? "Hubungi Saya" : "Contact Me"}
+          </button>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1, duration: 1 }}
-          className="mt-8"
+          transition={{ delay: 0.82, duration: 1 }}
+          className="mt-8 flex items-center justify-center gap-1.5 h-7"
+          data-testid="typing-status"
+          aria-label={lang === "id" ? "Status" : "Status"}
         >
-          <motion.div
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            className="text-muted-foreground/35 flex justify-center"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12l7 7 7-7"/>
-            </svg>
-          </motion.div>
+          <span className="text-sm md:text-base font-medium" style={{ color: "hsl(217 91% 62%)" }}>{displayText}</span>
+          {!shouldReduceMotion && <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }} style={{ color: "hsl(217 91% 62%)" }} className="font-light">|</motion.span>}
         </motion.div>
-      </div>
+      </motion.div>
     </section>
   );
 }

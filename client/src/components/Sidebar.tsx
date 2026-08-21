@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
+import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -7,13 +8,15 @@ interface SidebarProps {
   activeSection: string;
 }
 
-const navItems = [
-  { key: "home", icon: "🏠" },
-  { key: "about", icon: "👤" },
-  { key: "timeline", icon: "📅" },
-  { key: "projects", icon: "💼" },
-  { key: "friends", icon: "👥" },
-  { key: "contact", icon: "✉️" }
+const navItems: { key: string; icon: SvgIconName }[] = [
+  { key: "home", icon: "home" },
+  { key: "about", icon: "user" },
+  { key: "timeline", icon: "calendar" },
+  { key: "stack", icon: "wrench" },
+  { key: "projects", icon: "briefcase" },
+  { key: "friends", icon: "users" },
+  { key: "social", icon: "link" },
+  { key: "contact", icon: "mail" }
 ];
 
 export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps) {
@@ -73,8 +76,9 @@ export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps
                         : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     }`}
                     whileTap={{ scale: 0.96 }}
+                    aria-current={isActive ? "true" : undefined}
                   >
-                    <span className="text-sm">{item.icon}</span>
+                    <span className="text-muted-foreground" aria-hidden="true"><SvgIcon name={item.icon} size={16} /></span>
                     <span className="text-sm font-medium">{label}</span>
                     {isActive && (
                       <motion.div

@@ -6,35 +6,45 @@ import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
 import StackIcon from "tech-stack-icons";
+import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
+import { SchoolLogo } from "@/components/SchoolLogo";
 
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 const getAdminToken = () => sessionStorage.getItem("aka-admin-token") || "";
 const adminHeaders = () => ({ "Content-Type": "application/json", "X-Admin-Token": getAdminToken() });
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
+const TABS = ["analytics", "cron", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
-interface VisitorStats { total: number; today: number; history: { date: string; count: number }[] }
+interface VisitorStats { total: number; today: number; history: { date: string; count: number }[]; generatedAt?: string }
 interface LangStat { language: string; lines: number; percentage: number; color: string }
 interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean }
+interface AdminHealth { ok: boolean; generatedAt: string; uptimeSeconds: number; adminPasswordConfigured: boolean; emailConfigured: boolean; statsStorage: string; messagesStorage: string; lastVisitDate: string | null }
+interface CronRun { id: number; job_name: string; trigger_type: "scheduled" | "manual"; status: "running" | "success" | "failed"; started_at: string; completed_at: string | null; duration_ms: number | null; response: unknown; error_message: string | null; created_at: string }
+interface CronDashboard { jobName: string; schedule: string; timezone: string; nextScheduledAt: string; lastSuccessAt: string | null; totalRuns: number; successRuns: number; failedRuns: number; latest: CronRun | null; runs: CronRun[]; generatedAt: string }
 
-const TAB_CONFIG: { key: Tab; icon: string; label: string }[] = [
-  { key: "analytics", icon: "📊", label: "Analitik" },
-  { key: "home",      icon: "🏠", label: "Beranda"  },
-  { key: "about",     icon: "👤", label: "Tentang"  },
-  { key: "tech",      icon: "💻", label: "Tech"     },
-  { key: "projects",  icon: "💼", label: "Proyek"   },
-  { key: "friends",   icon: "👥", label: "Teman"    },
-  { key: "social",    icon: "🔗", label: "Medsos"   },
-  { key: "audio",     icon: "🎵", label: "Audio"    },
-  { key: "settings",  icon: "⚙️", label: "Setting"  },
+const TAB_CONFIG: { key: Tab; icon: SvgIconName; label: string }[] = [
+  { key: "analytics", icon: "analytics", label: "Analitik" },
+  { key: "cron",      icon: "calendar-check", label: "Cron Jobs" },
+  { key: "home",      icon: "home", label: "Beranda"  },
+  { key: "about",     icon: "user", label: "Tentang"  },
+  { key: "tech",      icon: "code", label: "Framework" },
+  { key: "projects",  icon: "briefcase", label: "Proyek"   },
+  { key: "friends",   icon: "users", label: "Teman"    },
+  { key: "social",    icon: "link", label: "Medsos"   },
+  { key: "audio",     icon: "music", label: "Audio"    },
+  { key: "settings",  icon: "settings", label: "Setting"  },
 ];
 
 // ── Shared UI components ───────────────────────────────────────────────────────
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all bg-background border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/10";
 
-function Card({ title, subtitle, badge, children }: { title: string; subtitle?: string; badge?: React.ReactNode; children: React.ReactNode }) {
+function IconText({ icon, children }: { icon: SvgIconName; children: React.ReactNode }) {
+  return <span className="inline-flex items-center gap-2"><SvgIcon name={icon} size={16} aria-hidden="true" />{children}</span>;
+}
+
+function Card({ title, subtitle, badge, children }: { title: React.ReactNode; subtitle?: string; badge?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
       <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between gap-2">
@@ -81,12 +91,21 @@ function SaveBar({ onSave, onCancel }: { onSave: () => void; onCancel: () => voi
 
 // Auto-translate helper
 async function autoTranslate(text: string): Promise<string | null> {
-  try {
-    const res = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-    if (!res.ok) return null;
-    const d = await res.json();
-    return d.result || null;
-  } catch { return null; }
+  const source = text.trim().slice(0, 2000);
+  if (!source) return null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const res = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: source }), signal: controller.signal });
+      const data = await res.json().catch(() => null);
+      if (res.ok && typeof data?.result === "string" && data.result.trim()) return data.result.trim();
+      if (res.status !== 429 && res.status < 500) return null;
+    } catch {}
+    finally { window.clearTimeout(timeout); }
+    if (attempt === 0) await new Promise(resolve => window.setTimeout(resolve, 400));
+  }
+  return null;
 }
 
 function TranslateBtn({ onClick, loading }: { onClick: () => void; loading: boolean }) {
@@ -123,31 +142,50 @@ export default function Admin() {
   const [sessionLoading, setSessionLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
+  const [activeBubble, setActiveBubble] = useState<Tab | null>(null);
+  const bubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [stats, setStats] = useState<VisitorStats | null>(null);
   const [langStats, setLangStats] = useState<LangStat[]>([]);
   const [messages, setMessages] = useState<ContactMsg[]>([]);
+  const [health, setHealth] = useState<AdminHealth | null>(null);
+  const [cron, setCron] = useState<CronDashboard | null>(null);
+  const [lastAnalyticsSync, setLastAnalyticsSync] = useState<Date | null>(null);
   const [draft, setDraft] = useState<PortfolioSettings>({ ...settings });
   const [refreshing, setRefreshing] = useState(false);
 
   // Unsaved changes tracker
   const [unsavedTabs, setUnsavedTabs] = useState<Set<Tab>>(new Set());
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const fetchAnalytics = useCallback(async () => {
     setRefreshing(true);
     try {
       const token = getAdminToken();
       const hdr = { "X-Admin-Token": token };
-      const [s, l, m] = await Promise.all([
+      const [s, l, m, h, c] = await Promise.all([
         fetch("/api/analytics/stats").then(r => r.json()).catch(() => null),
         fetch("/api/analytics/lang-stats").then(r => r.json()).catch(() => []),
-        fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => [])
+        fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch("/api/admin/cron/status", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
       if (s) setStats(s);
       if (Array.isArray(l)) setLangStats(l);
       if (Array.isArray(m)) setMessages(m);
+      if (h) setHealth(h);
+      if (c?.jobName) setCron(c);
     } catch {}
+    setLastAnalyticsSync(new Date());
     setRefreshing(false);
   }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") fetchAnalytics();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [authenticated, fetchAnalytics]);
 
   // Check existing session on mount
   useEffect(() => {
@@ -166,6 +204,17 @@ export default function Admin() {
     setDraft({ ...settings });
     setUnsavedTabs(new Set());
   }, [settings]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (unsavedTabs.size > 0) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [unsavedTabs.size]);
 
   // Track unsaved changes per tab
   const handleDraftChange = (updater: (d: PortfolioSettings) => PortfolioSettings) => {
@@ -206,7 +255,8 @@ export default function Admin() {
   const saveChanges = () => {
     updateSettings(draft);
     setUnsavedTabs(new Set());
-    toast({ title: "Tersimpan ✓", description: "Perubahan berhasil disimpan" });
+    setLastSavedAt(new Date());
+    toast({ title: "Tersimpan", description: "Perubahan berhasil disimpan" });
   };
 
   const cancelChanges = () => {
@@ -214,6 +264,22 @@ export default function Admin() {
     setUnsavedTabs(new Set());
     toast({ title: "Dibatalkan" });
   };
+
+  const saveAllChanges = () => {
+    if (unsavedTabs.size === 0) return;
+    saveChanges();
+  };
+
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setActiveBubble(tab);
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+    bubbleTimerRef.current = setTimeout(() => setActiveBubble(null), 1800);
+  };
+
+  useEffect(() => () => {
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+  }, []);
 
   // ── Session loading screen ────────────────────────────────────────────────
   if (sessionLoading) {
@@ -261,9 +327,10 @@ export default function Admin() {
                 onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleLogin()}
                 placeholder="Password rahasia..."
+                aria-label="Password admin"
                 data-testid="admin-password-input"
                 autoFocus
-                autoComplete="off"
+                autoComplete="current-password"
                 className="w-full px-4 py-3 pr-10 rounded-xl text-sm outline-none"
                 style={{
                   background: "hsl(var(--background))",
@@ -322,7 +389,7 @@ export default function Admin() {
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/90 backdrop-blur-xl border-b border-border/60">
-        <div className="max-w-3xl mx-auto px-4">
+        <div className="max-w-3xl mx-auto px-4 relative">
           <div className="flex items-center justify-between py-2.5">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
@@ -335,8 +402,15 @@ export default function Admin() {
                 <p className="text-[10px] text-muted-foreground leading-tight">Portfolio aka</p>
               </div>
             </div>
-            <div className="flex gap-1.5">
-              <button onClick={() => navigate("/")} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+              <div className="flex items-center gap-1.5">
+                {unsavedTabs.size > 0 && (
+                  <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Belum disimpan
+                  </div>
+                )}
+                {lastSavedAt && unsavedTabs.size === 0 && <span className="hidden lg:inline text-[10px] text-muted-foreground">Tersimpan {lastSavedAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+                {unsavedTabs.size > 0 && <button onClick={saveAllChanges} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>Simpan Semua</button>}
+                <button onClick={() => navigate("/")} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 Portfolio
               </button>
@@ -358,30 +432,45 @@ export default function Admin() {
               const isBadge = tab.key === "analytics" && unreadCount > 0;
               const hasUnsaved = unsavedTabs.has(tab.key);
               return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  data-testid={`admin-tab-${tab.key}`}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative"
-                  style={{
-                    background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
-                    color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
-                  }}
-                >
-                  <span>{tab.icon}</span>
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  {isBadge && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                  {!isBadge && hasUnsaved && (
-                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  )}
-                </button>
+                <div key={tab.key} className="relative flex-shrink-0">
+                  <button
+                    onClick={() => selectTab(tab.key)}
+                    onFocus={() => selectTab(tab.key)}
+                    data-testid={`admin-tab-${tab.key}`}
+                    aria-label={tab.label}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative"
+                    style={{
+                      background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
+                      color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
+                    }}
+                  >
+                    <SvgIcon name={tab.icon} size={14} aria-hidden="true" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    {isBadge && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+                    {!isBadge && hasUnsaved && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                  </button>
+
+                </div>
               );
             })}
           </div>
+          <AnimatePresence mode="wait">
+            {activeBubble && (
+              <motion.div
+                key={activeBubble}
+                initial={{ opacity: 0, y: -4, scale: 0.92 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.92 }}
+                transition={{ duration: 0.16 }}
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] -translate-x-1/2 z-[70] whitespace-nowrap rounded-xl px-3 py-1.5 text-[10px] font-semibold text-white"
+                style={{ background: "rgba(15,23,42,0.78)", border: "1px solid rgba(148,163,184,0.28)", boxShadow: "0 10px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12)", backdropFilter: "blur(16px) saturate(140%)" }}
+              >
+                {TAB_CONFIG.find(tab => tab.key === activeBubble)?.label}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -395,7 +484,8 @@ export default function Admin() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
           >
-            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} setMessages={setMessages} onRefresh={fetchAnalytics} refreshing={refreshing} />}
+            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} setMessages={setMessages} health={health} lastSync={lastAnalyticsSync} onRefresh={fetchAnalytics} refreshing={refreshing} />}
+            {activeTab === "cron"      && <CronTab cron={cron} onRefresh={fetchAnalytics} />}
             {activeTab === "home"      && <HomeTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "about"     && <AboutTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "tech"      && <TechTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
@@ -425,23 +515,26 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 // ── Analytics Tab ──────────────────────────────────────────────────────────────
-function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refreshing }: {
+function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSync, onRefresh, refreshing }: {
   stats: VisitorStats | null; langStats: LangStat[]; messages: ContactMsg[];
-  setMessages: (m: ContactMsg[]) => void; onRefresh: () => void; refreshing: boolean;
+  setMessages: (m: ContactMsg[]) => void; health: AdminHealth | null; lastSync: Date | null;
+  onRefresh: () => void; refreshing: boolean;
 }) {
   const { toast } = useToast();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterUnread, setFilterUnread] = useState(false);
+  const [messageQuery, setMessageQuery] = useState("");
+  const [sortNewest, setSortNewest] = useState(true);
 
   const maxVisit = stats?.history?.length ? Math.max(...stats.history.map(h => h.count), 1) : 1;
   const unread = messages.filter(m => !m.read).length;
 
   const statCards = [
-    { label: "Total Kunjungan", value: stats?.total ?? "—", icon: "👁️", color: "#3b82f6" },
-    { label: "Hari Ini",        value: stats?.today ?? "—", icon: "📅", color: "#10b981" },
-    { label: "Hari Aktif",      value: stats?.history?.filter(h => h.count > 0).length ?? "—", icon: "🗓️", color: "#f59e0b" },
-    { label: "Pesan Masuk",     value: messages.length,     icon: "✉️", color: "#8b5cf6", badge: unread > 0 ? unread : undefined },
+    { label: "Total Kunjungan", value: stats?.total ?? "—", icon: "eye" as SvgIconName, color: "#3b82f6" },
+    { label: "Hari Ini",        value: stats?.today ?? "—", icon: "calendar" as SvgIconName, color: "#10b981" },
+    { label: "Hari Aktif",      value: stats?.history?.filter(h => h.count > 0).length ?? "—", icon: "calendar-range" as SvgIconName, color: "#f59e0b" },
+    { label: "Pesan Masuk",     value: messages.length,     icon: "mail" as SvgIconName, color: "#8b5cf6", badge: unread > 0 ? unread : undefined },
   ];
 
   const markRead = async (id: string) => {
@@ -455,7 +548,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
     await Promise.all(unreadIds.map(id =>
       fetch(`/api/messages/${id}/read`, { method: "PATCH", headers: { "X-Admin-Token": getAdminToken() } })
     ));
-    toast({ title: "Semua pesan ditandai dibaca ✓" });
+    toast({ title: "Semua pesan ditandai dibaca" });
   };
 
   const deleteMsg = async (id: string) => {
@@ -465,19 +558,66 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
     setDeletingId(null);
   };
 
-  const filteredMsgs = filterUnread ? messages.filter(m => !m.read) : messages;
+  const filteredMsgs = messages
+    .filter(m => !filterUnread || !m.read)
+    .filter(m => !messageQuery.trim() || `${m.name} ${m.email} ${m.message}`.toLowerCase().includes(messageQuery.toLowerCase()))
+    .sort((a, b) => sortNewest ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  const exportMessages = () => {
+    const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const rows = [
+      ["Nama", "Email", "Pesan", "Waktu", "Status"],
+      ...filteredMsgs.map(m => [m.name, m.email, m.message, new Date(m.timestamp).toLocaleString("id-ID"), m.read ? "Dibaca" : "Belum dibaca"])
+    ];
+    const csv = rows.map(row => row.map(value => escapeCsv(value)).join(",")).join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aka-messages-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Pesan diekspor", description: `${filteredMsgs.length} pesan masuk ke file CSV` });
+  };
+
+  const exportAnalytics = () => {
+    const payload = { exportedAt: new Date().toISOString(), stats, langStats, messages, health };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aka-analytics-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Analytics diekspor", description: "Snapshot data server berhasil diunduh" });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Statistik kunjungan & pesan masuk</p>
-        <button onClick={onRefresh} disabled={refreshing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-          style={{ background: "hsl(var(--accent))", color: "hsl(var(--foreground))" }}
-          data-testid="refresh-analytics">
-          <motion.span animate={refreshing ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: 0.6, repeat: refreshing ? Infinity : 0, ease: "linear" }}>⟳</motion.span>
-          {refreshing ? "Memuat..." : "Refresh"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs text-muted-foreground">Statistik kunjungan & pesan masuk</p>
+          <p className="text-[10px] text-muted-foreground/70 mt-0.5">{lastSync ? `Sinkron ${lastSync.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Belum tersinkron"} · auto-refresh 30 detik</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={exportAnalytics} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-all"><SvgIcon name="download" size={12} aria-hidden="true" />JSON</button>
+          <button onClick={onRefresh} disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: "hsl(var(--accent))", color: "hsl(var(--foreground))" }}
+            data-testid="refresh-analytics">
+            <motion.span animate={refreshing ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: 0.6, repeat: refreshing ? Infinity : 0, ease: "linear" }}><SvgIcon name="refresh" size={12} aria-hidden="true" /></motion.span>
+            {refreshing ? "Memuat..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        {[
+          { label: "API", value: health?.ok ? "Online" : "Belum terhubung", color: health?.ok ? "#22c55e" : "#f59e0b" },
+          { label: "Email", value: health?.emailConfigured ? "Siap" : "Belum dikonfigurasi", color: health?.emailConfigured ? "#22c55e" : "#f59e0b" },
+          { label: "Pesan", value: health?.messagesStorage === "memory-instance" ? "Instance aktif" : "Persisten", color: health?.messagesStorage === "memory-instance" ? "#f59e0b" : "#22c55e" },
+          { label: "Uptime", value: health ? `${Math.floor(health.uptimeSeconds / 60)}m` : "—", color: "#60a5fa" }
+        ].map(item => <div key={item.label} className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}><span className="text-[10px] text-muted-foreground">{item.label}</span><span className="text-[10px] font-bold" style={{ color: item.color }}>{item.value}</span></div>)}
       </div>
 
       {/* Stat cards */}
@@ -487,7 +627,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
             className="rounded-xl p-4 relative" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}
             data-testid={`stat-card-${i}`}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xl">{s.icon}</span>
+              <SvgIcon name={s.icon} size={22} className="text-foreground/80" aria-hidden="true" />
               <div className="w-2 h-2 rounded-full" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} />
             </div>
             <p className="text-2xl font-bold text-foreground tabular-nums">{s.value}</p>
@@ -503,7 +643,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Visit history */}
       {stats?.history && stats.history.length > 0 && (
-        <Card title="📈 Riwayat Kunjungan" subtitle="30 hari terakhir (scroll)">
+        <Card title={<IconText icon="activity">Riwayat Kunjungan</IconText>} subtitle="30 hari terakhir (scroll)">
           <div className="space-y-2">
             {stats.history.slice(-14).reverse().map(h => (
               <div key={h.date} className="flex items-center gap-2.5">
@@ -524,33 +664,48 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Messages */}
       <Card
-        title="📬 Pesan Masuk"
+        title={<IconText icon="inbox">Pesan Masuk</IconText>}
         subtitle={`${unread} belum dibaca dari ${messages.length} total`}
         badge={unread > 0 ? (
           <button onClick={markAllRead} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold"
             style={{ background: "rgba(59,130,246,0.1)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.2)" }}>
-            ✓ Tandai semua dibaca
+            <span className="inline-flex items-center gap-1"><SvgIcon name="check" size={12} aria-hidden="true" />Tandai semua dibaca</span>
           </button>
         ) : undefined}
       >
         {messages.length > 0 && (
-          <div className="flex gap-1.5 mb-3">
-            <button onClick={() => setFilterUnread(false)}
+          <div className="space-y-2 mb-3">
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setFilterUnread(false)}
               className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
               style={{ background: !filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: !filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
               Semua ({messages.length})
             </button>
-            <button onClick={() => setFilterUnread(true)}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
-              style={{ background: filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
-              Belum dibaca ({unread})
-            </button>
+              <button onClick={() => setFilterUnread(true)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
+                style={{ background: filterUnread ? "hsl(var(--primary))" : "hsl(var(--accent))", color: filterUnread ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))" }}>
+                Belum dibaca ({unread})
+              </button>
+              <button onClick={exportMessages} className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
+                <span className="inline-flex items-center gap-1"><SvgIcon name="download" size={11} aria-hidden="true" />CSV</span>
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex items-center gap-2 flex-1 px-2.5 py-1.5 rounded-lg bg-accent/50 border border-border/50">
+                <SvgIcon name="search" size={12} className="text-muted-foreground" aria-hidden="true" />
+                <input value={messageQuery} onChange={e => setMessageQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent outline-none text-xs text-foreground placeholder:text-muted-foreground" placeholder="Cari nama, email, atau pesan..." aria-label="Cari pesan masuk" />
+              </div>
+              <select value={sortNewest ? "newest" : "oldest"} onChange={e => setSortNewest(e.target.value === "newest")} className="px-2 rounded-lg bg-accent text-xs text-accent-foreground outline-none" aria-label="Urutkan pesan">
+                <option value="newest">Terbaru</option>
+                <option value="oldest">Terlama</option>
+              </select>
+            </div>
           </div>
         )}
 
         {filteredMsgs.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-3xl mb-2">{messages.length === 0 ? "📭" : "✅"}</p>
+            <div className="flex justify-center mb-2 text-blue-400">{messages.length === 0 ? <SvgIcon name="inbox" size={30} /> : <SvgIcon name="check-circle" size={30} />}</div>
             <p className="text-xs text-muted-foreground">{messages.length === 0 ? "Belum ada pesan masuk" : "Semua pesan sudah dibaca"}</p>
           </div>
         ) : (
@@ -602,7 +757,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
 
       {/* Language stats */}
       {langStats.length > 0 && (
-        <Card title="💻 Statistik Kode" subtitle="Distribusi bahasa sumber kode">
+        <Card title={<IconText icon="code">Statistik Kode</IconText>} subtitle="Distribusi bahasa sumber kode">
           <div className="space-y-2.5">
             {langStats.map(s => (
               <div key={s.language} className="flex items-center gap-2.5">
@@ -621,6 +776,106 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
   );
 }
 
+function formatCronDate(value: string | null | undefined) {
+  if (!value) return "Belum ada";
+  return new Date(value).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}h ${String(hours).padStart(2, "0")}j ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}d`;
+}
+
+function CronTab({ cron, onRefresh }: { cron: CronDashboard | null; onRefresh: () => Promise<void> }) {
+  const { toast } = useToast();
+  const [now, setNow] = useState(() => Date.now());
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    let timer = 0;
+    const tick = () => {
+      setNow(Date.now());
+      timer = window.setTimeout(tick, 1000);
+    };
+    timer = window.setTimeout(tick, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const runManual = async () => {
+    if (running) return;
+    setRunning(true);
+    try {
+      const res = await fetch("/api/admin/cron/run", { method: "POST", headers: adminHeaders() });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Manual cron gagal");
+      toast({ title: "Cron manual berhasil", description: "Supabase merespons dan riwayat sudah diperbarui." });
+      await onRefresh();
+    } catch (error: any) {
+      toast({ title: "Cron manual gagal", description: error?.message || "Coba lagi beberapa saat.", variant: "destructive" });
+      await onRefresh();
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const nextAt = cron?.nextScheduledAt ? new Date(cron.nextScheduledAt).getTime() : 0;
+  const remaining = nextAt ? nextAt - now : 0;
+  const successRate = cron?.totalRuns ? Math.round((cron.successRuns / cron.totalRuns) * 100) : 0;
+  const status = cron?.latest?.status || "waiting";
+
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="rounded-2xl p-4 sm:col-span-2" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.2), rgba(30,41,59,0.45))", border: "1px solid rgba(96,165,250,0.25)" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-blue-200/70 font-bold">Supabase Keep-Alive</p>
+              <h2 className="text-lg font-bold text-white mt-1">Cron otomatis aktif</h2>
+              <p className="text-xs text-blue-100/70 mt-1">Query read-only berjalan sesuai jadwal untuk menjaga aktivitas database.</p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold text-emerald-200 bg-emerald-400/10 border border-emerald-400/20"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {status === "failed" ? "Perlu perhatian" : "Terproteksi"}</span>
+          </div>
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] text-blue-100/60 uppercase tracking-wide">Cron berikutnya</p>
+              <p className="text-2xl sm:text-3xl font-bold tabular-nums text-white mt-1" aria-live="polite">{nextAt ? formatCountdown(remaining) : "Menghitung..."}</p>
+              <p className="text-[11px] text-blue-100/60 mt-1">{formatCronDate(cron?.nextScheduledAt)} · {cron?.schedule || "0 3 */2 * *"} UTC</p>
+            </div>
+            <button onClick={runManual} disabled={running} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50 transition-transform active:scale-[0.97]" style={{ background: "linear-gradient(135deg, #2563eb, #4f46e5)" }}>
+              <SvgIcon name="refresh" size={14} aria-hidden="true" /> {running ? "Menjalankan..." : "Jalankan Manual"}
+            </button>
+          </div>
+        </div>
+        <div className="rounded-2xl p-4 bg-card border border-border/60">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-bold">Keandalan</p>
+          <p className="text-3xl font-bold text-foreground mt-2">{successRate}%</p>
+          <p className="text-xs text-muted-foreground mt-1">{cron?.successRuns ?? 0} sukses dari {cron?.totalRuns ?? 0} run</p>
+          <div className="h-1.5 rounded-full bg-accent overflow-hidden mt-4"><div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300" style={{ width: `${successRate}%` }} /></div>
+          <p className="text-[10px] text-muted-foreground mt-3">Gagal: {cron?.failedRuns ?? 0}</p>
+        </div>
+      </div>
+
+      <Card title={<IconText icon="activity">Status dan Riwayat Cron</IconText>} subtitle={`Update terakhir ${formatCronDate(cron?.generatedAt)}`} badge={<button onClick={() => void onRefresh()} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-colors"><SvgIcon name="refresh" size={12} aria-hidden="true" /> Refresh</button>}>
+        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+          <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.latest?.completed_at || cron?.latest?.started_at)}</p><p className="text-[10px] text-muted-foreground mt-1">{cron?.latest?.trigger_type === "manual" ? "Manual dari AdminDashboard" : "Terjadwal otomatis"}</p></div>
+          <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run sukses terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.lastSuccessAt)}</p><p className="text-[10px] text-muted-foreground mt-1">Database: Supabase PostgreSQL</p></div>
+        </div>
+        <div className="overflow-x-auto -mx-2">
+          <table className="w-full text-left text-xs min-w-[600px]"><thead><tr className="text-[10px] text-muted-foreground uppercase tracking-wide border-b border-border/50"><th className="px-2 py-2 font-semibold">Waktu</th><th className="px-2 py-2 font-semibold">Trigger</th><th className="px-2 py-2 font-semibold">Status</th><th className="px-2 py-2 font-semibold">Durasi</th><th className="px-2 py-2 font-semibold">Pesan</th></tr></thead><tbody>{cron?.runs?.length ? cron.runs.map(run => <tr key={run.id} className="border-b border-border/30 last:border-0"><td className="px-2 py-2.5 text-foreground/80">{formatCronDate(run.completed_at || run.started_at)}</td><td className="px-2 py-2.5 text-muted-foreground">{run.trigger_type === "manual" ? "Manual" : "Otomatis"}</td><td className="px-2 py-2.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${run.status === "success" ? "bg-emerald-500/10 text-emerald-400" : run.status === "failed" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"}`}>{run.status}</span></td><td className="px-2 py-2.5 text-muted-foreground">{run.duration_ms == null ? "—" : `${run.duration_ms} ms`}</td><td className="px-2 py-2.5 max-w-[220px] truncate text-muted-foreground">{run.error_message || (run.status === "success" ? "Supabase merespons normal" : "Menunggu hasil")}</td></tr>) : <tr><td colSpan={5} className="px-2 py-8 text-center text-muted-foreground">Belum ada riwayat. Jalankan cron manual untuk membuat log pertama.</td></tr>}</tbody></table>
+        </div>
+      </Card>
+
+      <Card title={<IconText icon="shield">Konfigurasi Keamanan</IconText>} subtitle="Informasi operasional yang aman ditampilkan di dashboard">
+        <div className="grid sm:grid-cols-3 gap-3 text-xs"><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Endpoint</p><p className="font-semibold text-foreground mt-1 break-all">/api/cron/supabase-keepalive</p></div><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Proteksi</p><p className="font-semibold text-emerald-400 mt-1">Authorization secret</p></div><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Akses tabel</p><p className="font-semibold text-foreground mt-1">RLS + RPC terbatas</p></div></div>
+      </Card>
+    </div>
+  );
+}
+
 // ── Home Tab ───────────────────────────────────────────────────────────────────
 function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
   const [trLoading, setTrLoading] = useState<Record<string, boolean>>({});
@@ -635,7 +890,7 @@ function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="🏠 Pengaturan Beranda">
+    <Card title={<IconText icon="home">Pengaturan Beranda</IconText>}>
       <div className="space-y-4">
         <Field label="URL Foto Profil">
           <input value={draft.photoUrl || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, photoUrl: e.target.value }))} className={inputCls} data-testid="admin-photo-url" placeholder="https://..." />
@@ -665,7 +920,7 @@ function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
         </Field>
 
         <div className="p-3.5 rounded-xl bg-accent/30 border border-border/50 space-y-3">
-          <p className="text-xs text-muted-foreground font-semibold">💡 Ketik teks ID, klik ID→EN untuk terjemahkan otomatis</p>
+          <p className="text-xs text-muted-foreground font-semibold inline-flex items-center gap-2"><SvgIcon name="lightbulb" size={14} aria-hidden="true" />Ketik teks ID, klik ID→EN untuk terjemahkan otomatis</p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Status Teks" hint="ID" row={<TranslateBtn loading={!!trLoading.statusTexts} onClick={() => translate("statusTexts", draft.statusTexts?.id?.join(", ") || "")} />}>
               <textarea rows={3} value={draft.statusTexts?.id?.join("\n") || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, statusTexts: { ...d.statusTexts, id: e.target.value.split("\n").map((s: string) => s.trim()).filter(Boolean) } }))} className={inputCls + " resize-none"} placeholder="Satu per baris..." />
@@ -697,7 +952,7 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="👤 Pengaturan Tentang">
+    <Card title={<IconText icon="user">Pengaturan Tentang</IconText>}>
       <div className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Tanggal Lahir">
@@ -714,7 +969,7 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
         </Field>
 
         <div className="p-3.5 rounded-xl bg-accent/30 border border-border/50 space-y-3">
-          <p className="text-xs text-muted-foreground font-semibold">💡 Klik ID→EN untuk terjemahkan deskripsi otomatis</p>
+          <p className="text-xs text-muted-foreground font-semibold inline-flex items-center gap-2"><SvgIcon name="lightbulb" size={14} aria-hidden="true" />Klik ID→EN untuk terjemahkan deskripsi otomatis</p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading.aboutDesc} onClick={() => translate("aboutDesc", draft.aboutDesc?.id || "")} />}>
               <textarea rows={4} value={draft.aboutDesc?.id || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, aboutDesc: { ...d.aboutDesc, id: e.target.value } }))} className={inputCls + " resize-none"} />
@@ -733,9 +988,9 @@ function AboutTab({ draft, setDraft, onSave, onCancel }: any) {
 
 // ── Tech Tab ───────────────────────────────────────────────────────────────────
 const CAT_META = {
-  programming: { label: "🧠 Programming", color: "#3b82f6" },
-  framework:   { label: "⚡ Framework & Library", color: "#6366f1" },
-  tools:       { label: "🔧 Tools & Platform", color: "#10b981" }
+  programming: { label: "Programming", icon: "code" as SvgIconName, color: "#3b82f6" },
+  framework:   { label: "Framework & Library", icon: "zap" as SvgIconName, color: "#6366f1" },
+  tools:       { label: "Tools & Platform", icon: "wrench" as SvgIconName, color: "#10b981" }
 } as const;
 
 function TechTab({ draft, setDraft, onSave, onCancel }: any) {
@@ -754,7 +1009,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
     }
     setDraft((d: PortfolioSettings) => ({ ...d, techStack: { ...d.techStack, [addCat]: [...existing, name] } }));
     setAddName("");
-    toast({ title: `Ditambahkan ke ${addCat} ✓`, description: `"${name}"` });
+    toast({ title: `Ditambahkan ke ${addCat}`, description: `"${name}"` });
   };
 
   const removeTech = (cat: string, name: string) => {
@@ -777,15 +1032,15 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
   return (
     <div className="space-y-4">
-      <Card title="➕ Tambah Teknologi" subtitle="Nama sesuai library tech-stack-icons">
+      <Card title={<IconText icon="plus">Tambah Teknologi</IconText>} subtitle="Nama sesuai library tech-stack-icons">
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            {(Object.entries(CAT_META) as [string, { label: string; color: string }][]).map(([key, meta]) => (
+            {(Object.entries(CAT_META) as [string, { label: string; icon: SvgIconName; color: string }][]).map(([key, meta]) => (
               <button key={key} onClick={() => setAddCat(key as any)}
                 className="flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all"
                 style={{ background: addCat === key ? `${meta.color}18` : "hsl(var(--accent)/0.5)", border: `1.5px solid ${addCat === key ? meta.color : "transparent"}`, color: addCat === key ? meta.color : "hsl(var(--muted-foreground))" }}
                 data-testid={`cat-select-${key}`}>
-                <span className="text-lg">{meta.label.split(" ")[0]}</span>
+                <SvgIcon name={meta.icon} size={18} aria-hidden="true" />
                 <span className="text-[10px]">{key}</span>
               </button>
             ))}
@@ -793,7 +1048,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
           <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "hsl(var(--accent)/0.4)", border: "1px solid hsl(var(--border)/0.6)" }}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
-              {addName.trim() ? <StackIcon name={addName.trim().toLowerCase()} variant="dark" className="w-5 h-5" /> : <span className="text-lg opacity-30">?</span>}
+              {addName.trim() ? <StackIcon name={addName.trim().toLowerCase()} variant="dark" className="w-5 h-5" /> : <SvgIcon name="code" size={18} className="opacity-30" aria-hidden="true" />}
             </div>
             <input
               dir="ltr"
@@ -805,7 +1060,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
               className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground/50"
               autoComplete="off" autoCorrect="off" spellCheck={false}
             />
-            {addName && <button onClick={() => setAddName("")} className="text-muted-foreground/60 hover:text-foreground text-xs flex-shrink-0">✕</button>}
+            {addName && <button onClick={() => setAddName("")} className="text-muted-foreground/60 hover:text-foreground text-xs flex-shrink-0" aria-label="Kosongkan nama teknologi"><SvgIcon name="x" size={14} /></button>}
           </div>
 
           <motion.button
@@ -825,9 +1080,9 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
 
       {/* Search */}
       <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="text-muted-foreground flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <SvgIcon name="search" size={14} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />
         <input dir="ltr" value={search} onChange={e => setSearch(e.target.value)} placeholder={`Cari dari ${totalCount} teknologi...`} className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground/50" data-testid="tech-search-input" />
-        {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-foreground text-xs">✕</button>}
+        {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-foreground text-xs" aria-label="Hapus pencarian"><SvgIcon name="x" size={14} /></button>}
       </div>
 
       {/* Tech lists */}
@@ -836,7 +1091,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
         const items = all.filter((n: string) => !search || n.toLowerCase().includes(search.toLowerCase()));
         const meta = CAT_META[cat];
         return (
-          <Card key={cat} title={meta.label} subtitle={`${all.length} item${items.length !== all.length ? ` · ${items.length} cocok` : ""}`}>
+          <Card key={cat} title={<IconText icon={meta.icon}>{meta.label}</IconText>} subtitle={`${all.length} item${items.length !== all.length ? ` · ${items.length} cocok` : ""}`}>
             {items.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-3">{search ? "Tidak ada yang cocok" : "Belum ada teknologi"}</p>
             ) : (
@@ -871,10 +1126,69 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
   );
 }
 
+function ProjectMediaEditor({ src, position, onPositionChange }: { src: string; position: { x: number; y: number }; onPositionChange: (position: { x: number; y: number }) => void }) {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [mediaState, setMediaState] = useState<"idle" | "loading" | "loaded" | "error">(src ? "loading" : "idle");
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    setMediaState(src ? "loading" : "idle");
+    setZoom(1);
+  }, [src]);
+
+  const updatePosition = (clientX: number, clientY: number) => {
+    const rect = previewRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.round(Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100)));
+    const y = Math.round(Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100)));
+    onPositionChange({ x, y });
+  };
+
+  return (
+    <div className="space-y-2.5">
+      <div
+        ref={previewRef}
+        className="relative aspect-[16/9] overflow-hidden rounded-xl border border-border bg-accent/40 select-none"
+        style={{ touchAction: "none", cursor: src ? (draggingRef.current ? "grabbing" : "grab") : "default" }}
+        onPointerDown={event => {
+          if (!src) return;
+          draggingRef.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          updatePosition(event.clientX, event.clientY);
+        }}
+        onPointerMove={event => {
+          if (draggingRef.current) updatePosition(event.clientX, event.clientY);
+        }}
+        onPointerUp={event => {
+          draggingRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => { draggingRef.current = false; }}
+        aria-label="Geser media untuk mengatur area fokus"
+      >
+        {src ? (
+          <img src={src} alt="Preview media project" onLoad={() => setMediaState("loaded")} onError={() => setMediaState("error")} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ objectPosition: `${position.x}% ${position.y}%`, transform: `scale(${zoom})`, transformOrigin: "center", transition: draggingRef.current ? "none" : "transform 160ms ease-out" }} draggable={false} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Masukkan URL gambar untuk melihat preview</div>
+        )}
+        {src && <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at 50% 50%, transparent 0 18%, rgba(15,23,42,0.18) 19%, transparent 20%), linear-gradient(rgba(255,255,255,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.16) 1px, transparent 1px)", backgroundSize: "100% 100%, 33.333% 33.333%, 33.333% 33.333%" }} />}
+        {src && <button type="button" onPointerDown={event => event.stopPropagation()} onClick={() => { setZoom(1); onPositionChange({ x: 50, y: 35 }); }} className="absolute right-2 top-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white bg-slate-950/65 hover:bg-slate-950/85 transition-colors" aria-label="Reset fokus gambar">Reset</button>}
+        {src && <span className="absolute bottom-2 left-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style={{ background: "rgba(15,23,42,0.68)", backdropFilter: "blur(10px)" }}>{mediaState === "error" ? "Media gagal dimuat" : mediaState === "loading" ? "Memuat media..." : "Geser fokus · pinch/zoom slider"}</span>}
+      </div>
+      {src && <div className="grid sm:grid-cols-3 gap-3">
+        <label className="space-y-1 text-[10px] text-muted-foreground">Fokus horizontal {position.x}%<input type="range" min="0" max="100" value={position.x} onChange={event => onPositionChange({ ...position, x: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus horizontal gambar" /></label>
+        <label className="space-y-1 text-[10px] text-muted-foreground">Fokus vertikal {position.y}%<input type="range" min="0" max="100" value={position.y} onChange={event => onPositionChange({ ...position, y: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus vertikal gambar" /></label>
+        <label className="space-y-1 text-[10px] text-muted-foreground">Zoom {zoom.toFixed(1)}×<input type="range" min="1" max="1.8" step="0.1" value={zoom} onChange={event => setZoom(Number(event.target.value))} className="w-full accent-blue-500" aria-label="Zoom preview gambar" /></label>
+      </div>}
+    </div>
+  );
+}
+
 // ── Projects Tab ───────────────────────────────────────────────────────────────
 function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
   const [editing, setEditing] = useState<string | null>(null);
-  const [newP, setNewP] = useState({ name: "", image: "", descId: "", descEn: "", url: "", buttonType: "view" });
+  const [newP, setNewP] = useState({ name: "", image: "", imagePosition: { x: 50, y: 35 }, descId: "", descEn: "", url: "", buttonType: "view" });
   const [trLoading, setTrLoading] = useState<Record<string, boolean>>({});
 
   const translateDesc = async (projectId: string, text: string) => {
@@ -900,8 +1214,8 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
 
   const addProject = () => {
     if (!newP.name.trim()) return;
-    setDraft((d: PortfolioSettings) => ({ ...d, projects: [...d.projects, { id: Date.now().toString(), name: newP.name, image: newP.image, desc: { id: newP.descId, en: newP.descEn }, url: newP.url, buttonType: newP.buttonType }] }));
-    setNewP({ name: "", image: "", descId: "", descEn: "", url: "", buttonType: "view" });
+    setDraft((d: PortfolioSettings) => ({ ...d, projects: [...d.projects, { id: Date.now().toString(), name: newP.name, image: newP.image, imagePosition: newP.imagePosition, desc: { id: newP.descId, en: newP.descEn }, url: newP.url, buttonType: newP.buttonType }] }));
+    setNewP({ name: "", image: "", imagePosition: { x: 50, y: 35 }, descId: "", descEn: "", url: "", buttonType: "view" });
   };
 
   return (
@@ -936,10 +1250,14 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Field label="Nama"><input value={project.name} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, name: e.target.value } : p) }))} className={inputCls} /></Field>
                     <Field label="URL Gambar">
-                      <input value={project.image} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, image: e.target.value } : p) }))} className={inputCls} />
-                      {project.image && <img src={project.image} alt="" className="mt-1.5 w-24 h-14 object-cover object-top rounded-lg border border-border" />}
+                      <input value={project.image} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, image: e.target.value } : p) }))} className={inputCls} placeholder="https://..." />
                     </Field>
                   </div>
+                  <ProjectMediaEditor
+                    src={project.image}
+                    position={project.imagePosition ?? { x: 50, y: 35 }}
+                    onPositionChange={position => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, imagePosition: position } : p) }))}
+                  />
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading[project.id]} onClick={() => translateDesc(project.id, project.desc.id)} />}>
                       <textarea rows={2} value={project.desc.id} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, desc: { ...p.desc, id: e.target.value } } : p) }))} className={inputCls + " resize-none"} />
@@ -970,6 +1288,7 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
             <Field label="Nama"><input value={newP.name} onChange={e => setNewP(n => ({ ...n, name: e.target.value }))} className={inputCls} placeholder="Nama proyek..." /></Field>
             <Field label="URL Gambar"><input value={newP.image} onChange={e => setNewP(n => ({ ...n, image: e.target.value }))} className={inputCls} placeholder="https://..." /></Field>
           </div>
+          <ProjectMediaEditor src={newP.image} position={newP.imagePosition} onPositionChange={imagePosition => setNewP(n => ({ ...n, imagePosition }))} />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading["new"]} onClick={async () => { setTrLoading(l => ({ ...l, new: true })); const r = await autoTranslate(newP.descId); setTrLoading(l => ({ ...l, new: false })); if (r) setNewP(n => ({ ...n, descEn: r })); }} />}>
               <textarea rows={2} value={newP.descId} onChange={e => setNewP(n => ({ ...n, descId: e.target.value }))} className={inputCls + " resize-none"} />
@@ -1013,7 +1332,7 @@ function FriendsTab({ draft, setDraft, onSave, onCancel }: any) {
   };
 
   return (
-    <Card title="👥 Daftar Teman" subtitle={`${draft.friends.length} teman terdaftar`}>
+    <Card title={<IconText icon="users">Daftar Teman</IconText>} subtitle={`${draft.friends.length} teman terdaftar`}>
       <div className="space-y-4">
         <div className="flex gap-2">
           <input value={newFriend} onChange={e => setNewFriend(e.target.value)} onKeyDown={e => e.key === "Enter" && addFriend()}
@@ -1051,23 +1370,23 @@ function FriendsTab({ draft, setDraft, onSave, onCancel }: any) {
 }
 
 // ── Social Tab ─────────────────────────────────────────────────────────────────
-const SOCIALS = [
-  { key: "github", label: "GitHub", icon: "🐙", ph: "https://github.com/..." },
-  { key: "instagram", label: "Instagram", icon: "📸", ph: "https://instagram.com/..." },
-  { key: "facebook", label: "Facebook", icon: "📘", ph: "https://facebook.com/..." },
-  { key: "youtube", label: "YouTube", icon: "▶️", ph: "https://youtube.com/@..." },
-  { key: "telegram", label: "Telegram", icon: "✈️", ph: "https://t.me/..." },
-  { key: "discord", label: "Discord", icon: "💬", ph: "https://discord.gg/..." },
-  { key: "email", label: "Email", icon: "📧", ph: "nama@email.com" },
+const SOCIALS: { key: string; label: string; icon: SvgIconName; ph: string }[] = [
+  { key: "github", label: "GitHub", icon: "github", ph: "https://github.com/..." },
+  { key: "instagram", label: "Instagram", icon: "instagram", ph: "https://instagram.com/..." },
+  { key: "facebook", label: "Facebook", icon: "link", ph: "https://facebook.com/..." },
+  { key: "youtube", label: "YouTube", icon: "youtube", ph: "https://youtube.com/@..." },
+  { key: "telegram", label: "Telegram", icon: "send", ph: "https://t.me/..." },
+  { key: "discord", label: "Discord", icon: "message", ph: "https://discord.gg/..." },
+  { key: "email", label: "Email", icon: "mail", ph: "nama@email.com" },
 ];
 
 function SocialTab({ draft, setDraft, onSave, onCancel }: any) {
   return (
-    <Card title="🔗 Media Sosial">
+    <Card title={<IconText icon="link">Media Sosial</IconText>}>
       <div className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           {SOCIALS.map(s => (
-            <Field key={s.key} label={`${s.icon} ${s.label}`}>
+            <Field key={s.key} label={s.label} row={<SvgIcon name={s.icon} size={14} aria-hidden="true" />}>
               <input value={draft.social?.[s.key] || ""} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, social: { ...d.social, [s.key]: e.target.value } }))} placeholder={s.ph} className={inputCls} />
             </Field>
           ))}
@@ -1103,7 +1422,7 @@ function AudioTab({ draft, setDraft, onSave, onCancel }: any) {
   return (
     <div className="space-y-4">
       {draft.playlist.map((track: PlaylistItem, i: number) => (
-        <Card key={track.id} title={`🎵 Lagu ${i + 1}`}>
+        <Card key={track.id} title={<IconText icon="music">Lagu {i + 1}</IconText>}>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex gap-1">
@@ -1176,14 +1495,14 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
   const strength = getStrength(newPw);
 
   const changePw = async () => {
-    if (!newPw.trim() || newPw.length < 3) return toast({ title: "Password minimal 3 karakter", variant: "destructive" });
+    if (!newPw.trim() || newPw.length < 10) return toast({ title: "Password minimal 10 karakter", variant: "destructive" });
     if (newPw !== confirmPw) return toast({ title: "Password tidak cocok", variant: "destructive" });
     setPwLoading(true);
     try {
       const res = await fetch("/api/admin/change-password", { method: "POST", headers: adminHeaders(), body: JSON.stringify({ newPassword: newPw }) });
       const data = await res.json();
       if (data.ok) {
-        toast({ title: "Password berhasil diubah ✓", description: "Logout otomatis. Login ulang dengan password baru." });
+        toast({ title: "Password berhasil diubah", description: "Logout otomatis. Login ulang dengan password baru." });
         setNewPw(""); setConfirmPw("");
         setTimeout(() => { sessionStorage.removeItem("aka-admin-token"); onLogout(); }, 1500);
       } else {
@@ -1196,7 +1515,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
   const handleReset = () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
     onReset(); setConfirmReset(false);
-    toast({ title: "Reset berhasil ✓", description: "Semua pengaturan dikembalikan ke default" });
+    toast({ title: "Reset berhasil", description: "Semua pengaturan dikembalikan ke default" });
   };
 
   const exportSettings = () => {
@@ -1204,7 +1523,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "aka-settings.json"; a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Diekspor ✓" });
+    toast({ title: "Diekspor" });
   };
 
   const importSettings = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1214,7 +1533,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       try {
         const parsed = JSON.parse(ev.target?.result as string);
         setDraft((d: any) => ({ ...d, ...parsed }));
-        toast({ title: "Diimpor ✓", description: "Review lalu simpan perubahan" });
+        toast({ title: "Diimpor", description: "Review lalu simpan perubahan" });
       } catch { toast({ title: "File tidak valid", variant: "destructive" }); }
     };
     reader.readAsText(file);
@@ -1232,9 +1551,9 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
     setTestEmailLoading(false);
   };
 
-  const sectionLabels: Record<string, string> = {
-    about: "👤 Tentang", timeline: "📅 Pendidikan", stack: "💻 Tech Stack",
-    projects: "💼 Proyek", friends: "👥 Teman", social: "🔗 Sosial Media", contact: "✉️ Kontak"
+  const sectionLabels: Record<string, React.ReactNode> = {
+    about: <IconText icon="user">Tentang</IconText>, timeline: <IconText icon="calendar">Pendidikan</IconText>, stack: <IconText icon="code">Tech Stack</IconText>,
+    projects: <IconText icon="briefcase">Proyek</IconText>, friends: <IconText icon="users">Teman</IconText>, social: <IconText icon="link">Sosial Media</IconText>, contact: <IconText icon="mail">Kontak</IconText>
   };
 
   return (
@@ -1251,7 +1570,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             Lihat Situs
           </a>
-          <button onClick={() => { navigator.clipboard?.writeText(window.location.origin).then(() => toast({ title: "URL disalin ✓" })); }}
+          <button onClick={() => { navigator.clipboard?.writeText(window.location.origin).then(() => toast({ title: "URL disalin" })); }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Salin URL
@@ -1260,7 +1579,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </div>
 
       {/* Section visibility */}
-      <Card title="👁️ Visibilitas Seksi" subtitle="Tampilkan/sembunyikan seksi di portfolio">
+      <Card title={<IconText icon="eye">Visibilitas Seksi</IconText>} subtitle="Tampilkan/sembunyikan seksi di portfolio">
         <div className="space-y-2">
           {Object.entries(sectionLabels).map(([key, label]) => {
             const isVisible = draft.sectionVisibility?.[key] !== false;
@@ -1282,11 +1601,11 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Education timeline */}
-      <Card title="🏫 Editor Pendidikan" subtitle="Edit nama sekolah dan tahun">
+      <Card title={<IconText icon="school">Editor Pendidikan</IconText>} subtitle="Edit nama sekolah dan tahun">
         <div className="space-y-3">
-          {([{ key: "sd", icon: "📚", label: "SD" }, { key: "mts", icon: "📖", label: "MTs / SMP" }, { key: "sma", icon: "🎓", label: "SMA / SMK" }] as const).map(({ key, icon, label }) => (
+          {([{ key: "sd", label: "SD" }, { key: "mts", label: "MTs / SMP" }, { key: "sma", label: "SMA / SMK" }] as const).map(({ key, label }) => (
             <div key={key} className="p-3 rounded-xl bg-accent/30 border border-border/50 space-y-2">
-              <p className="text-xs font-bold text-foreground/70">{icon} {label}</p>
+              <p className="text-xs font-bold text-foreground/70 flex items-center gap-2"><SchoolLogo level={key} alt={label} className="w-8 h-8 rounded-lg bg-white p-0.5" />{label}</p>
               <div className="grid sm:grid-cols-2 gap-2">
                 <Field label="Nama Sekolah">
                   <input value={draft.timeline?.[key]?.name || ""} onChange={e => setDraft((d: any) => ({ ...d, timeline: { ...d.timeline, [key]: { ...d.timeline?.[key], name: e.target.value } } }))} className={inputCls} />
@@ -1302,14 +1621,29 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* SEO */}
-      <Card title="🔍 SEO & Meta">
+      <Card title={<IconText icon="search">SEO & Meta</IconText>} subtitle="Optimalkan snippet pencarian dan social preview">
         <div className="space-y-3">
-          <Field label="Judul Halaman">
-            <input value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
+          <Field label="Judul Halaman" hint={`${(draft.seo?.title || "").length}/60`}>
+            <input maxLength={60} value={draft.seo?.title || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} className={inputCls} placeholder="aka — Portfolio" />
           </Field>
-          <Field label="Deskripsi Meta">
-            <textarea rows={2} value={draft.seo?.description || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className={inputCls + " resize-none"} />
+          <Field label="Deskripsi Meta" hint={`${(draft.seo?.description || "").length}/160`}>
+            <textarea maxLength={160} rows={2} value={draft.seo?.description || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className={inputCls + " resize-none"} />
           </Field>
+          <Field label="Keywords" hint="pisahkan dengan koma">
+            <input value={draft.seo?.keywords || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, keywords: e.target.value } }))} className={inputCls} placeholder="portfolio, developer, Sumatera Barat" />
+          </Field>
+          <Field label="Canonical URL">
+            <input type="url" value={draft.seo?.canonical || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, canonical: e.target.value } }))} className={inputCls} placeholder="https://akadev.me/" />
+          </Field>
+          <Field label="Open Graph Image URL">
+            <input type="url" value={draft.seo?.ogImage || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, ogImage: e.target.value } }))} className={inputCls} placeholder="https://.../og-image.jpg" />
+          </Field>
+          <div className="rounded-xl p-4 space-y-1.5" style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Preview Google</p>
+            <p className="text-base text-blue-500 line-clamp-1">{draft.seo?.title || "Judul halaman"}</p>
+            <p className="text-xs text-green-600 truncate">{draft.seo?.canonical || "https://akadev.me/"}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{draft.seo?.description || "Deskripsi meta akan tampil di sini."}</p>
+          </div>
           <Field label="Teks Footer">
             <input value={draft.footerText || ""} onChange={e => setDraft((d: any) => ({ ...d, footerText: e.target.value }))} className={inputCls} placeholder="© 2026 Aka" />
           </Field>
@@ -1317,8 +1651,22 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
         <SaveBar onSave={onSave} onCancel={onCancel} />
       </Card>
 
+      <Card title={<IconText icon="zap">Motion & Parallax</IconText>} subtitle="Atur efek scroll hero tanpa mengganggu reduced-motion">
+        <div className="space-y-4">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span><span className="block text-sm font-semibold text-foreground">Aktifkan parallax hero</span><span className="block text-[11px] text-muted-foreground mt-0.5">Otomatis nonaktif jika perangkat meminta reduced motion.</span></span>
+            <input type="checkbox" checked={draft.motion?.parallaxEnabled !== false} onChange={e => setDraft((d: any) => ({ ...d, motion: { ...d.motion, parallaxEnabled: e.target.checked } }))} className="h-4 w-4 accent-blue-500" />
+          </label>
+          <Field label="Intensitas Parallax" hint={`${Math.round((draft.motion?.parallaxIntensity ?? 0.35) * 100)}%`}>
+            <input type="range" min="0" max="0.75" step="0.05" value={draft.motion?.parallaxIntensity ?? 0.35} onChange={e => setDraft((d: any) => ({ ...d, motion: { ...d.motion, parallaxIntensity: Number(e.target.value) } }))} className="w-full accent-blue-500" />
+          </Field>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><SvgIcon name="info" size={14} className="text-blue-400" aria-hidden="true" />Rekomendasi 25–45% untuk menjaga depth visual tetap halus dan ringan.</div>
+        </div>
+        <SaveBar onSave={onSave} onCancel={onCancel} />
+      </Card>
+
       {/* Export/Import */}
-      <Card title="📦 Ekspor / Impor Pengaturan" subtitle="Backup atau restore semua pengaturan">
+      <Card title={<IconText icon="package">Ekspor / Impor Pengaturan</IconText>} subtitle="Backup atau restore semua pengaturan">
         <div className="flex flex-wrap gap-2">
           <motion.button whileTap={{ scale: 0.95 }} onClick={exportSettings} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "white" }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1333,10 +1681,10 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Test Email */}
-      <Card title="📧 Test Email" subtitle="Verifikasi konfigurasi email (Gmail)">
+      <Card title={<IconText icon="mail">Test Email</IconText>} subtitle="Verifikasi konfigurasi email (Gmail)">
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
-            <span>ℹ️</span>
+            <SvgIcon name="info" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
             <span className="text-muted-foreground">Kirim email percobaan ke <strong>EMAIL_RECIPIENT</strong> untuk memastikan konfigurasi Gmail berjalan dengan benar.</span>
           </div>
           <motion.button whileTap={{ scale: 0.96 }} onClick={testEmail} disabled={testEmailLoading} data-testid="test-email-btn"
@@ -1353,7 +1701,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="p-3 rounded-xl text-xs flex items-center gap-2"
                 style={{ background: testEmailResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)", border: `1px solid ${testEmailResult.ok ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}` }}>
-                <span>{testEmailResult.ok ? "✅" : "❌"}</span>
+                <SvgIcon name={testEmailResult.ok ? "circle-check" : "circle-x"} size={16} className={testEmailResult.ok ? "text-green-500" : "text-red-500"} aria-hidden="true" />
                 <span style={{ color: testEmailResult.ok ? "#22c55e" : "#ef4444" }}>{testEmailResult.msg}</span>
               </motion.div>
             )}
@@ -1362,11 +1710,11 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Change password */}
-      <Card title="🔑 Ganti Password Admin" subtitle="Password diverifikasi oleh server">
+      <Card title={<IconText icon="key">Ganti Password Admin</IconText>} subtitle="Password diverifikasi oleh server">
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
-            <span>🛡️</span>
-            <span className="text-muted-foreground">Password tersimpan <strong>di server</strong>, tidak di browser. Untuk perubahan permanen di Vercel, set env var <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di dashboard Vercel.</span>
+            <SvgIcon name="shield" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
+            <span className="text-muted-foreground">Password tidak pernah disimpan di browser. Perubahan ini berlaku pada sesi server saat ini; untuk permanen, perbarui secret <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di Vercel.</span>
           </div>
 
           <Field label="Password Baru">
@@ -1377,7 +1725,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
                 onChange={e => setNewPw(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && changePw()}
                 className={inputCls + " pr-10"}
-                placeholder="Minimal 3 karakter..."
+                placeholder="Minimal 10 karakter..."
                 data-testid="new-password-input"
                 autoComplete="new-password"
               />
@@ -1409,17 +1757,17 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             <div className="flex items-center gap-1.5 text-xs">
               <div className={`w-1.5 h-1.5 rounded-full ${newPw === confirmPw ? "bg-green-500" : "bg-red-500"}`} />
               <span className={newPw === confirmPw ? "text-green-500" : "text-red-400"}>
-                {newPw === confirmPw ? "Password cocok ✓" : "Password tidak cocok"}
+                {newPw === confirmPw ? "Password cocok" : "Password tidak cocok"}
               </span>
             </div>
           )}
 
-          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={!newPw || !confirmPw || newPw !== confirmPw || pwLoading}
+          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={newPw.length < 10 || !confirmPw || newPw !== confirmPw || pwLoading}
             data-testid="save-password-btn"
-            className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
             style={{
-              background: newPw && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
-              color: newPw && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
+              background: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
+              color: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
             }}>
             {pwLoading ? (
               <><motion.span animate={{ rotate: 360 }} transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }} className="block w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> Menyimpan...</>
@@ -1429,13 +1777,13 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
       </Card>
 
       {/* Reset */}
-      <Card title="🔁 Reset Pengaturan" subtitle="Kembalikan semua ke nilai default">
+      <Card title={<IconText icon="reset">Reset Pengaturan</IconText>} subtitle="Kembalikan semua ke nilai default">
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Semua perubahan akan hilang dan kembali ke pengaturan bawaan. Tindakan ini tidak dapat dibatalkan.</p>
           <motion.button whileTap={{ scale: 0.95 }} onClick={handleReset} data-testid="admin-reset"
             className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
             style={{ background: confirmReset ? "hsl(var(--destructive))" : "hsl(var(--destructive)/0.1)", color: confirmReset ? "white" : "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive)/0.3)" }}>
-            {confirmReset ? "⚠️ Klik lagi untuk konfirmasi" : "Reset ke Default"}
+            {confirmReset ? <span className="inline-flex items-center gap-1.5"><SvgIcon name="alert" size={14} aria-hidden="true" />Klik lagi untuk konfirmasi</span> : "Reset ke Default"}
           </motion.button>
         </div>
       </Card>

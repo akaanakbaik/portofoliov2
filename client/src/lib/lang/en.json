@@ -3,8 +3,10 @@
     "home": "Home",
     "about": "About",
     "timeline": "Timeline",
+    "stack": "Stack",
     "projects": "Projects",
     "friends": "Friends",
+    "social": "Social",
     "contact": "Contact"
   },
   "home": {
@@ -71,7 +73,7 @@
     "errorDesc": "An error occurred while sending. Please try again."
   },
   "footer": {
-    "built": "Built with ❤️ and code"
+    "built": "Built with code"
   },
   "admin": {
     "password": "Password",

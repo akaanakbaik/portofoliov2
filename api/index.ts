@@ -18,7 +18,10 @@ const routeSetup = (async () => {
   }
 })();
 
-// 4-arg error handler (must be registered after routes)
+app.use("/api", (_req: Request, res: Response) => {
+  if (!res.headersSent) res.status(404).json({ error: "API route not found" });
+});
+
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("[api] Express error:", err);
   const status = err.status || err.statusCode || 500;

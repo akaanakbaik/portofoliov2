@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePortfolio } from "@/lib/PortfolioContext";
+import { useLang } from "@/lib/LangContext";
 
 function PlayIcon() {
   return (
@@ -82,6 +83,7 @@ function formatTime(sec: number) {
 }
 
 export default function AudioPlayer() {
+  const { lang } = useLang();
   const { settings } = usePortfolio();
   const playlist = settings.playlist;
 
@@ -216,6 +218,8 @@ export default function AudioPlayer() {
               boxShadow: "0 4px 20px rgba(0,0,0,0.45)"
             }}
             data-testid="audio-show"
+            aria-label={lang === "id" ? "Tampilkan pemutar audio" : "Show audio player"}
+            title={lang === "id" ? "Tampilkan pemutar audio" : "Show audio player"}
           >
             <span className="text-blue-400"><MusicNoteIcon /></span>
           </motion.button>
