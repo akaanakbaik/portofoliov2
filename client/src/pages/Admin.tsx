@@ -374,7 +374,7 @@ export default function Admin() {
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/90 backdrop-blur-xl border-b border-border/60">
-        <div className="max-w-3xl mx-auto px-4">
+        <div className="max-w-3xl mx-auto px-4 relative">
           <div className="flex items-center justify-between py-2.5">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
@@ -434,25 +434,28 @@ export default function Admin() {
                     {isBadge && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
                     {!isBadge && hasUnsaved && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />}
                   </button>
-                  <AnimatePresence>
-                    {activeBubble === tab.key && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -4, scale: 0.92 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -4, scale: 0.92 }}
-                        transition={{ duration: 0.16 }}
-                        role="tooltip"
-                        className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] -translate-x-1/2 z-[70] whitespace-nowrap rounded-xl px-2.5 py-1.5 text-[10px] font-semibold text-white"
-                        style={{ background: "rgba(15,23,42,0.78)", border: "1px solid rgba(148,163,184,0.24)", boxShadow: "0 10px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12)", backdropFilter: "blur(16px) saturate(140%)" }}
-                      >
-                        {tab.label}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+
                 </div>
               );
             })}
           </div>
+          <AnimatePresence mode="wait">
+            {activeBubble && (
+              <motion.div
+                key={activeBubble}
+                initial={{ opacity: 0, y: -4, scale: 0.92 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.92 }}
+                transition={{ duration: 0.16 }}
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] -translate-x-1/2 z-[70] whitespace-nowrap rounded-xl px-3 py-1.5 text-[10px] font-semibold text-white"
+                style={{ background: "rgba(15,23,42,0.78)", border: "1px solid rgba(148,163,184,0.28)", boxShadow: "0 10px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12)", backdropFilter: "blur(16px) saturate(140%)" }}
+              >
+                {TAB_CONFIG.find(tab => tab.key === activeBubble)?.label}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -1007,10 +1010,65 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
   );
 }
 
+function ProjectMediaEditor({ src, position, onPositionChange }: { src: string; position: { x: number; y: number }; onPositionChange: (position: { x: number; y: number }) => void }) {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [mediaState, setMediaState] = useState<"idle" | "loading" | "loaded" | "error">(src ? "loading" : "idle");
+
+  useEffect(() => {
+    setMediaState(src ? "loading" : "idle");
+  }, [src]);
+
+  const updatePosition = (clientX: number, clientY: number) => {
+    const rect = previewRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.round(Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100)));
+    const y = Math.round(Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100)));
+    onPositionChange({ x, y });
+  };
+
+  return (
+    <div className="space-y-2.5">
+      <div
+        ref={previewRef}
+        className="relative aspect-[16/9] overflow-hidden rounded-xl border border-border bg-accent/40 select-none"
+        style={{ touchAction: "none", cursor: src ? "crosshair" : "default" }}
+        onPointerDown={event => {
+          if (!src) return;
+          draggingRef.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          updatePosition(event.clientX, event.clientY);
+        }}
+        onPointerMove={event => {
+          if (draggingRef.current) updatePosition(event.clientX, event.clientY);
+        }}
+        onPointerUp={event => {
+          draggingRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => { draggingRef.current = false; }}
+        aria-label="Geser media untuk mengatur area fokus"
+      >
+        {src ? (
+          <img src={src} alt="Preview media project" onLoad={() => setMediaState("loaded")} onError={() => setMediaState("error")} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ objectPosition: `${position.x}% ${position.y}%` }} draggable={false} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Masukkan URL gambar untuk melihat preview</div>
+        )}
+        {src && <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at 50% 50%, transparent 0 18%, rgba(15,23,42,0.18) 19%, transparent 20%), linear-gradient(rgba(255,255,255,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.16) 1px, transparent 1px)", backgroundSize: "100% 100%, 33.333% 33.333%, 33.333% 33.333%" }} />}
+        {src && <span className="absolute bottom-2 left-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style={{ background: "rgba(15,23,42,0.68)", backdropFilter: "blur(10px)" }}>{mediaState === "error" ? "Media gagal dimuat" : mediaState === "loading" ? "Memuat media..." : "Geser untuk mengatur fokus"}</span>}
+      </div>
+      {src && <div className="grid grid-cols-2 gap-3">
+        <label className="space-y-1 text-[10px] text-muted-foreground">Fokus horizontal {position.x}%<input type="range" min="0" max="100" value={position.x} onChange={event => onPositionChange({ ...position, x: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus horizontal gambar" /></label>
+        <label className="space-y-1 text-[10px] text-muted-foreground">Fokus vertikal {position.y}%<input type="range" min="0" max="100" value={position.y} onChange={event => onPositionChange({ ...position, y: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus vertikal gambar" /></label>
+      </div>}
+    </div>
+  );
+}
+
 // ── Projects Tab ───────────────────────────────────────────────────────────────
 function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
   const [editing, setEditing] = useState<string | null>(null);
-  const [newP, setNewP] = useState({ name: "", image: "", descId: "", descEn: "", url: "", buttonType: "view" });
+  const [newP, setNewP] = useState({ name: "", image: "", imagePosition: { x: 50, y: 35 }, descId: "", descEn: "", url: "", buttonType: "view" });
   const [trLoading, setTrLoading] = useState<Record<string, boolean>>({});
 
   const translateDesc = async (projectId: string, text: string) => {
@@ -1036,8 +1094,8 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
 
   const addProject = () => {
     if (!newP.name.trim()) return;
-    setDraft((d: PortfolioSettings) => ({ ...d, projects: [...d.projects, { id: Date.now().toString(), name: newP.name, image: newP.image, desc: { id: newP.descId, en: newP.descEn }, url: newP.url, buttonType: newP.buttonType }] }));
-    setNewP({ name: "", image: "", descId: "", descEn: "", url: "", buttonType: "view" });
+    setDraft((d: PortfolioSettings) => ({ ...d, projects: [...d.projects, { id: Date.now().toString(), name: newP.name, image: newP.image, imagePosition: newP.imagePosition, desc: { id: newP.descId, en: newP.descEn }, url: newP.url, buttonType: newP.buttonType }] }));
+    setNewP({ name: "", image: "", imagePosition: { x: 50, y: 35 }, descId: "", descEn: "", url: "", buttonType: "view" });
   };
 
   return (
@@ -1072,10 +1130,14 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Field label="Nama"><input value={project.name} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, name: e.target.value } : p) }))} className={inputCls} /></Field>
                     <Field label="URL Gambar">
-                      <input value={project.image} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, image: e.target.value } : p) }))} className={inputCls} />
-                      {project.image && <img src={project.image} alt="" className="mt-1.5 w-24 h-14 object-cover object-top rounded-lg border border-border" />}
+                      <input value={project.image} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, image: e.target.value } : p) }))} className={inputCls} placeholder="https://..." />
                     </Field>
                   </div>
+                  <ProjectMediaEditor
+                    src={project.image}
+                    position={project.imagePosition ?? { x: 50, y: 35 }}
+                    onPositionChange={position => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, imagePosition: position } : p) }))}
+                  />
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading[project.id]} onClick={() => translateDesc(project.id, project.desc.id)} />}>
                       <textarea rows={2} value={project.desc.id} onChange={e => setDraft((d: PortfolioSettings) => ({ ...d, projects: d.projects.map((p: ProjectItem) => p.id === project.id ? { ...p, desc: { ...p.desc, id: e.target.value } } : p) }))} className={inputCls + " resize-none"} />
@@ -1106,6 +1168,7 @@ function ProjectsTab({ draft, setDraft, onSave, onCancel }: any) {
             <Field label="Nama"><input value={newP.name} onChange={e => setNewP(n => ({ ...n, name: e.target.value }))} className={inputCls} placeholder="Nama proyek..." /></Field>
             <Field label="URL Gambar"><input value={newP.image} onChange={e => setNewP(n => ({ ...n, image: e.target.value }))} className={inputCls} placeholder="https://..." /></Field>
           </div>
+          <ProjectMediaEditor src={newP.image} position={newP.imagePosition} onPositionChange={imagePosition => setNewP(n => ({ ...n, imagePosition }))} />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Deskripsi" hint="ID" row={<TranslateBtn loading={!!trLoading["new"]} onClick={async () => { setTrLoading(l => ({ ...l, new: true })); const r = await autoTranslate(newP.descId); setTrLoading(l => ({ ...l, new: false })); if (r) setNewP(n => ({ ...n, descEn: r })); }} />}>
               <textarea rows={2} value={newP.descId} onChange={e => setNewP(n => ({ ...n, descId: e.target.value }))} className={inputCls + " resize-none"} />

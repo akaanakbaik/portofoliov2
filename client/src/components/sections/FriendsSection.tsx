@@ -12,11 +12,12 @@ export default function FriendsSection() {
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPausedRef = useRef(false);
   const isAutoWritingRef = useRef(false);
+  const lastAutoWriteRef = useRef(0);
   const posRef = useRef(0);
   const lastManualRef = useRef(0);
 
   const syncManualPosition = useCallback(() => {
-    if (!scrollRef.current || isAutoWritingRef.current) return;
+    if (!scrollRef.current || isAutoWritingRef.current || performance.now() - lastAutoWriteRef.current < 100) return;
     posRef.current = scrollRef.current.scrollLeft;
     lastManualRef.current = Date.now();
     isPausedRef.current = true;
@@ -40,6 +41,7 @@ export default function FriendsSection() {
       const max = Math.max(container.scrollWidth / 2, 1);
       posRef.current = posRef.current >= max ? 0 : posRef.current + 0.55;
       isAutoWritingRef.current = true;
+      lastAutoWriteRef.current = performance.now();
       container.scrollLeft = posRef.current;
       isAutoWritingRef.current = false;
     }
@@ -100,10 +102,10 @@ export default function FriendsSection() {
             data-auto-scroll={!shouldReduceMotion}
             aria-label={t.friends.title}
           >
-            <div className="flex gap-2.5" role="list">
+            <div className="flex gap-2.5 flex-shrink-0 w-max" role="list">
               {settings.friends.map((friend, i) => <div key={`primary-${friend}-${i}`} role="listitem">{renderFriend(friend, i)}</div>)}
             </div>
-            {!shouldReduceMotion && <div className="flex gap-2.5" aria-hidden="true">
+            {!shouldReduceMotion && <div className="flex gap-2.5 flex-shrink-0 w-max" aria-hidden="true">
               {settings.friends.map((friend, i) => renderFriend(friend, i + settings.friends.length))}
             </div>}
           </div>

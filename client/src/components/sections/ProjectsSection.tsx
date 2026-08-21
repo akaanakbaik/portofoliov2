@@ -47,7 +47,7 @@ export default function ProjectsSection() {
                 data-testid={`project-card-${project.id}`}
               >
                 <div className="relative overflow-hidden aspect-[16/9]">
-                  <img src={project.image} alt={project.name} className="w-full h-full object-cover object-top" loading={i < 3 ? "eager" : "lazy"} decoding="async" draggable={false} />
+                  <img src={project.image} alt={project.name} className="w-full h-full object-cover" style={{ objectPosition: `${project.imagePosition?.x ?? 50}% ${project.imagePosition?.y ?? 35}%` }} loading={i < 3 ? "eager" : "lazy"} decoding="async" draggable={false} />
                   <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 55%, hsl(var(--card)) 100%)" }} />
                 </div>
 

@@ -14,6 +14,7 @@ export interface ProjectItem {
   desc: { id: string; en: string };
   url: string;
   buttonType: string;
+  imagePosition?: { x: number; y: number };
 }
 
 export interface TechStack {
