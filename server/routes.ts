@@ -7,6 +7,7 @@ import os from "os";
 import https from "https";
 import http from "http";
 import crypto from "crypto";
+import { translate as translateGoogle } from "@vitalets/google-translate-api";
 
 // ─── Stateless HMAC token (works across Vercel serverless instances) ──────────
 // SESSION_SECRET must match across all Vercel instances (set in Vercel env vars)
@@ -111,6 +112,8 @@ function recordVisit() {
 }
 
 interface SupabaseVisitStats { total: number; today: number; history: VisitRecord[]; generatedAt: string }
+interface CronRunRecord { id: number; job_name: string; trigger_type: "scheduled" | "manual"; status: "running" | "success" | "failed"; started_at: string; completed_at: string | null; duration_ms: number | null; response: unknown; error_message: string | null; created_at: string }
+interface CronDashboard { jobName: string; schedule: string; timezone: string; nextScheduledAt: string; lastSuccessAt: string | null; totalRuns: number; successRuns: number; failedRuns: number; latest: CronRunRecord | null; runs: CronRunRecord[]; generatedAt: string }
 
 function getSupabaseAnalyticsConfig() {
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/\/$/, "");
@@ -118,13 +121,13 @@ function getSupabaseAnalyticsConfig() {
   return url && key ? { url, key } : null;
 }
 
-async function callSupabaseAnalyticsRpc<T>(functionName: string): Promise<T> {
+async function callSupabaseAnalyticsRpc<T>(functionName: string, body: Record<string, unknown> = {}): Promise<T> {
   const config = getSupabaseAnalyticsConfig();
   if (!config) throw new Error("Supabase analytics is not configured");
   const response = await fetch(`${config.url}/rest/v1/rpc/${functionName}`, {
     method: "POST",
     headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
-    body: "{}"
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 300);
@@ -137,6 +140,25 @@ async function readAnalyticsStats(): Promise<SupabaseVisitStats> {
   if (getSupabaseAnalyticsConfig()) return await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
   const today = new Date().toISOString().slice(0, 10);
   return { total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory, generatedAt: new Date().toISOString() };
+}
+
+async function recordCronRun(input: { triggerType: "scheduled" | "manual"; status: "running" | "success" | "failed"; startedAt: string; completedAt?: string | null; durationMs?: number | null; response?: unknown; errorMessage?: string | null }) {
+  if (!getSupabaseAnalyticsConfig()) return null;
+  return await callSupabaseAnalyticsRpc<CronRunRecord>("record_portfolio_cron_run", {
+    p_job_name: "supabase-keepalive",
+    p_trigger_type: input.triggerType,
+    p_status: input.status,
+    p_started_at: input.startedAt,
+    p_completed_at: input.completedAt ?? null,
+    p_duration_ms: input.durationMs ?? null,
+    p_response: input.response ?? null,
+    p_error_message: input.errorMessage ?? null
+  });
+}
+
+async function readCronDashboard(): Promise<CronDashboard> {
+  if (!getSupabaseAnalyticsConfig()) throw new Error("Supabase cron storage is not configured");
+  return await callSupabaseAnalyticsRpc<CronDashboard>("get_portfolio_cron_dashboard", { p_limit: 50 });
 }
 
 // ─── Contact messages (in-memory; per-instance on Vercel) ────────────────────
@@ -192,15 +214,41 @@ function fetchUrl(url: string): Promise<string> {
   });
 }
 
+const translationCache = new Map<string, { value: string; expiresAt: number }>();
+const TRANSLATION_CACHE_TTL = 15 * 60 * 1000;
+
+function cleanTranslation(value: unknown, source: string) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (!normalized || normalized.toLowerCase() === source.trim().toLowerCase()) return null;
+  return normalized.slice(0, 4000);
+}
+
 async function translateIdToEn(text: string): Promise<string> {
-  const engines = [
-    async () => { const d = JSON.parse(await fetchUrl(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encodeURIComponent(text)}`)); return d[0][0][0] as string; },
-    async () => { const d = JSON.parse(await fetchUrl(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=id|en`)); return d.responseData.translatedText as string; }
+  const source = text.trim().slice(0, 2000);
+  const cacheKey = source.toLowerCase();
+  const cached = translationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const engines: Array<{ name: string; run: () => Promise<unknown> }> = [
+    { name: "google-http", run: async () => { const d = JSON.parse(await fetchUrl(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encodeURIComponent(source)}`)); return Array.isArray(d?.[0]) ? d[0].map((part: unknown[]) => part?.[0] || "").join(" ") : null; } },
+    { name: "google-translate-npm", run: async () => (await translateGoogle(source, { from: "id", to: "en" })).text },
+    { name: "mymemory-http", run: async () => { const d = JSON.parse(await fetchUrl(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(source)}&langpair=id|en`)); return d?.responseData?.translatedText; } }
   ];
-  for (const fn of engines) {
-    try { const r = await fn(); if (r?.trim()) return r.trim(); } catch { }
+  const failures: string[] = [];
+  for (const engine of engines) {
+    try {
+      const result = cleanTranslation(await engine.run(), source);
+      if (result) {
+        translationCache.set(cacheKey, { value: result, expiresAt: Date.now() + TRANSLATION_CACHE_TTL });
+        if (translationCache.size > 200) translationCache.delete(translationCache.keys().next().value as string);
+        return result;
+      }
+      failures.push(`${engine.name}: empty`);
+    } catch (error: any) {
+      failures.push(`${engine.name}: ${String(error?.message || "failed").slice(0, 120)}`);
+    }
   }
-  throw new Error("All translation engines failed");
+  throw new Error(`All translation engines failed: ${failures.join(" | ")}`);
 }
 
 // ─── Email HTML template ──────────────────────────────────────────────────────
@@ -238,6 +286,26 @@ function buildEmailHtml(name: string, email: string, message: string): string {
 </table>
 </td></tr></table>
 </body></html>`;
+}
+
+async function executeSupabaseKeepAlive(triggerType: "scheduled" | "manual") {
+  const startedAt = new Date();
+  try {
+    const stats = await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
+    const completedAt = new Date();
+    const response = { ok: true, storage: "supabase", total: stats.total, today: stats.today, generatedAt: stats.generatedAt };
+    await recordCronRun({ triggerType, status: "success", startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), durationMs: completedAt.getTime() - startedAt.getTime(), response });
+    return response;
+  } catch (error: any) {
+    const completedAt = new Date();
+    const errorMessage = String(error?.message || "Supabase keep-alive failed").slice(0, 2000);
+    try {
+      await recordCronRun({ triggerType, status: "failed", startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), durationMs: completedAt.getTime() - startedAt.getTime(), errorMessage });
+    } catch (recordError) {
+      console.error("[cron] Failed to record failed run:", recordError);
+    }
+    throw new Error(errorMessage);
+  }
 }
 
 // ─── Register routes ──────────────────────────────────────────────────────────
@@ -281,17 +349,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/cron/supabase-keepalive", async (req, res) => {
     const cronSecret = (process.env.CRON_SECRET || "").trim();
     const authorization = req.headers.authorization || "";
-    if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
-      return res.status(401).json({ ok: false, error: "Unauthorized" });
-    }
-    if (!getSupabaseAnalyticsConfig()) {
-      return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
-    }
+    if (!cronSecret || authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!getSupabaseAnalyticsConfig()) return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
     try {
-      const stats = await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
-      return res.json({ ok: true, storage: "supabase", total: stats.total, today: stats.today, generatedAt: stats.generatedAt });
-    } catch (error) {
+      return res.json(await executeSupabaseKeepAlive("scheduled"));
+    } catch (error: any) {
       console.error("[cron/supabase-keepalive] Storage error:", error);
+      return res.status(502).json({ ok: false, error: "Supabase keep-alive failed" });
+    }
+  });
+
+  app.get("/api/admin/cron/status", requireAdmin, async (_req, res) => {
+    try {
+      return res.json(await readCronDashboard());
+    } catch (error: any) {
+      console.error("[admin/cron/status] Storage error:", error);
+      return res.status(502).json({ ok: false, error: "Cron dashboard unavailable" });
+    }
+  });
+
+  app.post("/api/admin/cron/run", requireAdmin, async (_req, res) => {
+    if (!getSupabaseAnalyticsConfig()) return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
+    try {
+      return res.json(await executeSupabaseKeepAlive("manual"));
+    } catch (error: any) {
+      console.error("[admin/cron/run] Storage error:", error);
       return res.status(502).json({ ok: false, error: "Supabase keep-alive failed" });
     }
   });

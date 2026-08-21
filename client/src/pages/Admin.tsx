@@ -14,16 +14,19 @@ const getAdminToken = () => sessionStorage.getItem("aka-admin-token") || "";
 const adminHeaders = () => ({ "Content-Type": "application/json", "X-Admin-Token": getAdminToken() });
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
+const TABS = ["analytics", "cron", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
 interface VisitorStats { total: number; today: number; history: { date: string; count: number }[]; generatedAt?: string }
 interface LangStat { language: string; lines: number; percentage: number; color: string }
 interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean }
 interface AdminHealth { ok: boolean; generatedAt: string; uptimeSeconds: number; adminPasswordConfigured: boolean; emailConfigured: boolean; statsStorage: string; messagesStorage: string; lastVisitDate: string | null }
+interface CronRun { id: number; job_name: string; trigger_type: "scheduled" | "manual"; status: "running" | "success" | "failed"; started_at: string; completed_at: string | null; duration_ms: number | null; response: unknown; error_message: string | null; created_at: string }
+interface CronDashboard { jobName: string; schedule: string; timezone: string; nextScheduledAt: string; lastSuccessAt: string | null; totalRuns: number; successRuns: number; failedRuns: number; latest: CronRun | null; runs: CronRun[]; generatedAt: string }
 
 const TAB_CONFIG: { key: Tab; icon: SvgIconName; label: string }[] = [
   { key: "analytics", icon: "analytics", label: "Analitik" },
+  { key: "cron",      icon: "calendar-check", label: "Cron Jobs" },
   { key: "home",      icon: "home", label: "Beranda"  },
   { key: "about",     icon: "user", label: "Tentang"  },
   { key: "tech",      icon: "code", label: "Framework" },
@@ -88,12 +91,21 @@ function SaveBar({ onSave, onCancel }: { onSave: () => void; onCancel: () => voi
 
 // Auto-translate helper
 async function autoTranslate(text: string): Promise<string | null> {
-  try {
-    const res = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-    if (!res.ok) return null;
-    const d = await res.json();
-    return d.result || null;
-  } catch { return null; }
+  const source = text.trim().slice(0, 2000);
+  if (!source) return null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const res = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: source }), signal: controller.signal });
+      const data = await res.json().catch(() => null);
+      if (res.ok && typeof data?.result === "string" && data.result.trim()) return data.result.trim();
+      if (res.status !== 429 && res.status < 500) return null;
+    } catch {}
+    finally { window.clearTimeout(timeout); }
+    if (attempt === 0) await new Promise(resolve => window.setTimeout(resolve, 400));
+  }
+  return null;
 }
 
 function TranslateBtn({ onClick, loading }: { onClick: () => void; loading: boolean }) {
@@ -136,6 +148,7 @@ export default function Admin() {
   const [langStats, setLangStats] = useState<LangStat[]>([]);
   const [messages, setMessages] = useState<ContactMsg[]>([]);
   const [health, setHealth] = useState<AdminHealth | null>(null);
+  const [cron, setCron] = useState<CronDashboard | null>(null);
   const [lastAnalyticsSync, setLastAnalyticsSync] = useState<Date | null>(null);
   const [draft, setDraft] = useState<PortfolioSettings>({ ...settings });
   const [refreshing, setRefreshing] = useState(false);
@@ -149,16 +162,18 @@ export default function Admin() {
     try {
       const token = getAdminToken();
       const hdr = { "X-Admin-Token": token };
-      const [s, l, m, h] = await Promise.all([
+      const [s, l, m, h, c] = await Promise.all([
         fetch("/api/analytics/stats").then(r => r.json()).catch(() => null),
         fetch("/api/analytics/lang-stats").then(r => r.json()).catch(() => []),
         fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
+        fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch("/api/admin/cron/status", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
       if (s) setStats(s);
       if (Array.isArray(l)) setLangStats(l);
       if (Array.isArray(m)) setMessages(m);
       if (h) setHealth(h);
+      if (c?.jobName) setCron(c);
     } catch {}
     setLastAnalyticsSync(new Date());
     setRefreshing(false);
@@ -470,6 +485,7 @@ export default function Admin() {
             transition={{ duration: 0.15, ease: "easeOut" }}
           >
             {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} setMessages={setMessages} health={health} lastSync={lastAnalyticsSync} onRefresh={fetchAnalytics} refreshing={refreshing} />}
+            {activeTab === "cron"      && <CronTab cron={cron} onRefresh={fetchAnalytics} />}
             {activeTab === "home"      && <HomeTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "about"     && <AboutTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "tech"      && <TechTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
@@ -760,6 +776,106 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
   );
 }
 
+function formatCronDate(value: string | null | undefined) {
+  if (!value) return "Belum ada";
+  return new Date(value).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}h ${String(hours).padStart(2, "0")}j ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}d`;
+}
+
+function CronTab({ cron, onRefresh }: { cron: CronDashboard | null; onRefresh: () => Promise<void> }) {
+  const { toast } = useToast();
+  const [now, setNow] = useState(() => Date.now());
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    let timer = 0;
+    const tick = () => {
+      setNow(Date.now());
+      timer = window.setTimeout(tick, 1000);
+    };
+    timer = window.setTimeout(tick, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const runManual = async () => {
+    if (running) return;
+    setRunning(true);
+    try {
+      const res = await fetch("/api/admin/cron/run", { method: "POST", headers: adminHeaders() });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Manual cron gagal");
+      toast({ title: "Cron manual berhasil", description: "Supabase merespons dan riwayat sudah diperbarui." });
+      await onRefresh();
+    } catch (error: any) {
+      toast({ title: "Cron manual gagal", description: error?.message || "Coba lagi beberapa saat.", variant: "destructive" });
+      await onRefresh();
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const nextAt = cron?.nextScheduledAt ? new Date(cron.nextScheduledAt).getTime() : 0;
+  const remaining = nextAt ? nextAt - now : 0;
+  const successRate = cron?.totalRuns ? Math.round((cron.successRuns / cron.totalRuns) * 100) : 0;
+  const status = cron?.latest?.status || "waiting";
+
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="rounded-2xl p-4 sm:col-span-2" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.2), rgba(30,41,59,0.45))", border: "1px solid rgba(96,165,250,0.25)" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-blue-200/70 font-bold">Supabase Keep-Alive</p>
+              <h2 className="text-lg font-bold text-white mt-1">Cron otomatis aktif</h2>
+              <p className="text-xs text-blue-100/70 mt-1">Query read-only berjalan sesuai jadwal untuk menjaga aktivitas database.</p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold text-emerald-200 bg-emerald-400/10 border border-emerald-400/20"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {status === "failed" ? "Perlu perhatian" : "Terproteksi"}</span>
+          </div>
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] text-blue-100/60 uppercase tracking-wide">Cron berikutnya</p>
+              <p className="text-2xl sm:text-3xl font-bold tabular-nums text-white mt-1" aria-live="polite">{nextAt ? formatCountdown(remaining) : "Menghitung..."}</p>
+              <p className="text-[11px] text-blue-100/60 mt-1">{formatCronDate(cron?.nextScheduledAt)} · {cron?.schedule || "0 3 */2 * *"} UTC</p>
+            </div>
+            <button onClick={runManual} disabled={running} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50 transition-transform active:scale-[0.97]" style={{ background: "linear-gradient(135deg, #2563eb, #4f46e5)" }}>
+              <SvgIcon name="refresh" size={14} aria-hidden="true" /> {running ? "Menjalankan..." : "Jalankan Manual"}
+            </button>
+          </div>
+        </div>
+        <div className="rounded-2xl p-4 bg-card border border-border/60">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-bold">Keandalan</p>
+          <p className="text-3xl font-bold text-foreground mt-2">{successRate}%</p>
+          <p className="text-xs text-muted-foreground mt-1">{cron?.successRuns ?? 0} sukses dari {cron?.totalRuns ?? 0} run</p>
+          <div className="h-1.5 rounded-full bg-accent overflow-hidden mt-4"><div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300" style={{ width: `${successRate}%` }} /></div>
+          <p className="text-[10px] text-muted-foreground mt-3">Gagal: {cron?.failedRuns ?? 0}</p>
+        </div>
+      </div>
+
+      <Card title={<IconText icon="activity">Status dan Riwayat Cron</IconText>} subtitle={`Update terakhir ${formatCronDate(cron?.generatedAt)}`} badge={<button onClick={() => void onRefresh()} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-colors"><SvgIcon name="refresh" size={12} aria-hidden="true" /> Refresh</button>}>
+        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+          <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.latest?.completed_at || cron?.latest?.started_at)}</p><p className="text-[10px] text-muted-foreground mt-1">{cron?.latest?.trigger_type === "manual" ? "Manual dari AdminDashboard" : "Terjadwal otomatis"}</p></div>
+          <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run sukses terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.lastSuccessAt)}</p><p className="text-[10px] text-muted-foreground mt-1">Database: Supabase PostgreSQL</p></div>
+        </div>
+        <div className="overflow-x-auto -mx-2">
+          <table className="w-full text-left text-xs min-w-[600px]"><thead><tr className="text-[10px] text-muted-foreground uppercase tracking-wide border-b border-border/50"><th className="px-2 py-2 font-semibold">Waktu</th><th className="px-2 py-2 font-semibold">Trigger</th><th className="px-2 py-2 font-semibold">Status</th><th className="px-2 py-2 font-semibold">Durasi</th><th className="px-2 py-2 font-semibold">Pesan</th></tr></thead><tbody>{cron?.runs?.length ? cron.runs.map(run => <tr key={run.id} className="border-b border-border/30 last:border-0"><td className="px-2 py-2.5 text-foreground/80">{formatCronDate(run.completed_at || run.started_at)}</td><td className="px-2 py-2.5 text-muted-foreground">{run.trigger_type === "manual" ? "Manual" : "Otomatis"}</td><td className="px-2 py-2.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${run.status === "success" ? "bg-emerald-500/10 text-emerald-400" : run.status === "failed" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"}`}>{run.status}</span></td><td className="px-2 py-2.5 text-muted-foreground">{run.duration_ms == null ? "—" : `${run.duration_ms} ms`}</td><td className="px-2 py-2.5 max-w-[220px] truncate text-muted-foreground">{run.error_message || (run.status === "success" ? "Supabase merespons normal" : "Menunggu hasil")}</td></tr>) : <tr><td colSpan={5} className="px-2 py-8 text-center text-muted-foreground">Belum ada riwayat. Jalankan cron manual untuk membuat log pertama.</td></tr>}</tbody></table>
+        </div>
+      </Card>
+
+      <Card title={<IconText icon="shield">Konfigurasi Keamanan</IconText>} subtitle="Informasi operasional yang aman ditampilkan di dashboard">
+        <div className="grid sm:grid-cols-3 gap-3 text-xs"><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Endpoint</p><p className="font-semibold text-foreground mt-1 break-all">/api/cron/supabase-keepalive</p></div><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Proteksi</p><p className="font-semibold text-emerald-400 mt-1">Authorization secret</p></div><div className="rounded-xl p-3 bg-accent/40"><p className="text-muted-foreground">Akses tabel</p><p className="font-semibold text-foreground mt-1">RLS + RPC terbatas</p></div></div>
+      </Card>
+    </div>
+  );
+}
+
 // ── Home Tab ───────────────────────────────────────────────────────────────────
 function HomeTab({ draft, setDraft, onSave, onCancel }: any) {
   const [trLoading, setTrLoading] = useState<Record<string, boolean>>({});
@@ -1014,9 +1130,11 @@ function ProjectMediaEditor({ src, position, onPositionChange }: { src: string; 
   const previewRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [mediaState, setMediaState] = useState<"idle" | "loading" | "loaded" | "error">(src ? "loading" : "idle");
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     setMediaState(src ? "loading" : "idle");
+    setZoom(1);
   }, [src]);
 
   const updatePosition = (clientX: number, clientY: number) => {
@@ -1032,7 +1150,7 @@ function ProjectMediaEditor({ src, position, onPositionChange }: { src: string; 
       <div
         ref={previewRef}
         className="relative aspect-[16/9] overflow-hidden rounded-xl border border-border bg-accent/40 select-none"
-        style={{ touchAction: "none", cursor: src ? "crosshair" : "default" }}
+        style={{ touchAction: "none", cursor: src ? (draggingRef.current ? "grabbing" : "grab") : "default" }}
         onPointerDown={event => {
           if (!src) return;
           draggingRef.current = true;
@@ -1050,16 +1168,18 @@ function ProjectMediaEditor({ src, position, onPositionChange }: { src: string; 
         aria-label="Geser media untuk mengatur area fokus"
       >
         {src ? (
-          <img src={src} alt="Preview media project" onLoad={() => setMediaState("loaded")} onError={() => setMediaState("error")} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ objectPosition: `${position.x}% ${position.y}%` }} draggable={false} />
+          <img src={src} alt="Preview media project" onLoad={() => setMediaState("loaded")} onError={() => setMediaState("error")} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ objectPosition: `${position.x}% ${position.y}%`, transform: `scale(${zoom})`, transformOrigin: "center", transition: draggingRef.current ? "none" : "transform 160ms ease-out" }} draggable={false} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Masukkan URL gambar untuk melihat preview</div>
         )}
         {src && <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at 50% 50%, transparent 0 18%, rgba(15,23,42,0.18) 19%, transparent 20%), linear-gradient(rgba(255,255,255,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.16) 1px, transparent 1px)", backgroundSize: "100% 100%, 33.333% 33.333%, 33.333% 33.333%" }} />}
-        {src && <span className="absolute bottom-2 left-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style={{ background: "rgba(15,23,42,0.68)", backdropFilter: "blur(10px)" }}>{mediaState === "error" ? "Media gagal dimuat" : mediaState === "loading" ? "Memuat media..." : "Geser untuk mengatur fokus"}</span>}
+        {src && <button type="button" onPointerDown={event => event.stopPropagation()} onClick={() => { setZoom(1); onPositionChange({ x: 50, y: 35 }); }} className="absolute right-2 top-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white bg-slate-950/65 hover:bg-slate-950/85 transition-colors" aria-label="Reset fokus gambar">Reset</button>}
+        {src && <span className="absolute bottom-2 left-2 rounded-lg px-2 py-1 text-[10px] font-semibold text-white" style={{ background: "rgba(15,23,42,0.68)", backdropFilter: "blur(10px)" }}>{mediaState === "error" ? "Media gagal dimuat" : mediaState === "loading" ? "Memuat media..." : "Geser fokus · pinch/zoom slider"}</span>}
       </div>
-      {src && <div className="grid grid-cols-2 gap-3">
+      {src && <div className="grid sm:grid-cols-3 gap-3">
         <label className="space-y-1 text-[10px] text-muted-foreground">Fokus horizontal {position.x}%<input type="range" min="0" max="100" value={position.x} onChange={event => onPositionChange({ ...position, x: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus horizontal gambar" /></label>
         <label className="space-y-1 text-[10px] text-muted-foreground">Fokus vertikal {position.y}%<input type="range" min="0" max="100" value={position.y} onChange={event => onPositionChange({ ...position, y: Number(event.target.value) })} className="w-full accent-blue-500" aria-label="Fokus vertikal gambar" /></label>
+        <label className="space-y-1 text-[10px] text-muted-foreground">Zoom {zoom.toFixed(1)}×<input type="range" min="1" max="1.8" step="0.1" value={zoom} onChange={event => setZoom(Number(event.target.value))} className="w-full accent-blue-500" aria-label="Zoom preview gambar" /></label>
       </div>}
     </div>
   );
