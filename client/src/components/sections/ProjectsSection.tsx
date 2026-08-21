@@ -21,13 +21,14 @@ export default function ProjectsSection() {
             {t.projects.title}
           </h2>
           <div className="w-8 h-0.5 mx-auto rounded-full bg-gradient-to-r from-blue-400 to-blue-600" />
+          <p className="mt-3 text-[11px] text-muted-foreground/70">{lang === "id" ? "Geser ke samping untuk melihat semua karya" : "Swipe sideways to explore all work"}</p>
         </motion.div>
 
         <div className="relative -mx-4 md:mx-0">
           <div className="absolute left-0 top-0 bottom-0 w-10 md:w-14 z-10 pointer-events-none bg-gradient-to-r from-background to-transparent" aria-hidden="true" />
           <div className="absolute right-0 top-0 bottom-0 w-10 md:w-14 z-10 pointer-events-none bg-gradient-to-l from-background to-transparent" aria-hidden="true" />
           <div
-            className="flex gap-4 overflow-x-auto snap-x snap-mandatory overscroll-x-contain px-4 md:px-1 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex gap-4 overflow-x-auto snap-x snap-mandatory overscroll-x-contain touch-pan-x cursor-grab active:cursor-grabbing px-4 md:px-1 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="list"
             tabIndex={0}
             aria-label={lang === "id" ? "Daftar project" : "Project list"}

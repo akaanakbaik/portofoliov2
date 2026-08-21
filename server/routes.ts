@@ -13,8 +13,12 @@ import crypto from "crypto";
 const TOKEN_SECRET = process.env.SESSION_SECRET || "aka-portfolio-default-secret-2026";
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+function passwordFingerprint(): string {
+  return crypto.createHash("sha256").update(getAdminPassword()).digest("hex").slice(0, 32);
+}
+
 function createAdminToken(): string {
-  const payload = Buffer.from(JSON.stringify({ admin: true, exp: Date.now() + TOKEN_TTL_MS })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ admin: true, exp: Date.now() + TOKEN_TTL_MS, pwd: passwordFingerprint() })).toString("base64url");
   const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
@@ -32,7 +36,7 @@ function verifyAdminToken(token: string): boolean {
     if (aBuf.length !== bBuf.length) return false;
     if (!crypto.timingSafeEqual(aBuf, bBuf)) return false;
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return data.admin === true && typeof data.exp === "number" && Date.now() < data.exp;
+    return data.admin === true && typeof data.exp === "number" && Date.now() < data.exp && data.pwd === passwordFingerprint();
   } catch {
     return false;
   }
@@ -230,8 +234,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/stats", (_req, res) => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      res.json({ total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory });
-    } catch { res.json({ total: 0, today: 0, history: [] }); }
+      res.json({ total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory, generatedAt: new Date().toISOString() });
+    } catch { res.json({ total: 0, today: 0, history: [], generatedAt: new Date().toISOString() }); }
   });
 
   app.get("/api/analytics/lang-stats", (_req, res) => {
@@ -273,11 +277,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
+  app.get("/api/admin/health", requireAdmin, (_req, res) => {
+    res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      uptimeSeconds: Math.round(process.uptime()),
+      adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
+      emailConfigured: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
+      statsStorage: "temporary-instance-file",
+      messagesStorage: "memory-instance",
+      lastVisitDate: visitHistory.length ? visitHistory[visitHistory.length - 1].date : null
+    });
+  });
+
   app.post("/api/admin/change-password", requireAdmin, (req, res) => {
     try {
       const { newPassword } = req.body || {};
-      if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length < 3) {
-        return res.status(400).json({ error: "Password minimal 3 karakter" });
+      if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length < 10) {
+        return res.status(400).json({ error: "Password minimal 10 karakter" });
       }
       runtimeAdminPassword = newPassword.trim();
       console.log("[admin] Password changed at runtime");

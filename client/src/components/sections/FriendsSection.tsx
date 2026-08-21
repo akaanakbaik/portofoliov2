@@ -9,16 +9,39 @@ export default function FriendsSection() {
   const shouldReduceMotion = useReducedMotion();
   const scrollRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPausedRef = useRef(false);
+  const isAutoWritingRef = useRef(false);
   const posRef = useRef(0);
   const lastManualRef = useRef(0);
 
+  const syncManualPosition = useCallback(() => {
+    if (!scrollRef.current || isAutoWritingRef.current) return;
+    posRef.current = scrollRef.current.scrollLeft;
+    lastManualRef.current = Date.now();
+    isPausedRef.current = true;
+  }, []);
+
+  const scheduleResume = useCallback(() => {
+    if (shouldReduceMotion) return;
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      if (!scrollRef.current) return;
+      if (Date.now() - lastManualRef.current >= 850) {
+        posRef.current = scrollRef.current.scrollLeft;
+        isPausedRef.current = false;
+      }
+    }, 900);
+  }, [shouldReduceMotion]);
+
   const animate = useCallback(() => {
-    if (scrollRef.current && !isPausedRef.current && !shouldReduceMotion) {
-      posRef.current += 0.55;
-      const max = scrollRef.current.scrollWidth / 2;
-      if (posRef.current >= max) posRef.current = 0;
-      scrollRef.current.scrollLeft = posRef.current;
+    const container = scrollRef.current;
+    if (container && !isPausedRef.current && !shouldReduceMotion) {
+      const max = Math.max(container.scrollWidth / 2, 1);
+      posRef.current = posRef.current >= max ? 0 : posRef.current + 0.55;
+      isAutoWritingRef.current = true;
+      container.scrollLeft = posRef.current;
+      isAutoWritingRef.current = false;
     }
     if (!shouldReduceMotion) animRef.current = requestAnimationFrame(animate);
   }, [shouldReduceMotion]);
@@ -26,21 +49,16 @@ export default function FriendsSection() {
   useEffect(() => {
     if (shouldReduceMotion) return;
     animRef.current = requestAnimationFrame(animate);
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
   }, [animate, shouldReduceMotion]);
 
-  const pause = () => {
-    isPausedRef.current = true;
-    lastManualRef.current = Date.now();
+  const pause = useCallback(() => {
+    syncManualPosition();
     if (scrollRef.current) posRef.current = scrollRef.current.scrollLeft;
-  };
-
-  const resume = () => {
-    if (shouldReduceMotion) return;
-    setTimeout(() => {
-      if (Date.now() - lastManualRef.current >= 1200) isPausedRef.current = false;
-    }, 1200);
-  };
+  }, [syncManualPosition]);
 
   const renderFriend = (friend: string, i: number) => (
     <motion.div
@@ -65,7 +83,23 @@ export default function FriendsSection() {
         <div className="relative">
           <div className="absolute left-0 top-0 bottom-0 w-12 z-10 pointer-events-none bg-gradient-to-r from-background to-transparent" aria-hidden="true" />
           <div className="absolute right-0 top-0 bottom-0 w-12 z-10 pointer-events-none bg-gradient-to-l from-background to-transparent" aria-hidden="true" />
-          <div ref={scrollRef} className={`flex gap-2.5 overflow-x-auto py-3 px-4 ${shouldReduceMotion ? "flex-wrap justify-center overflow-visible" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"}`} onMouseEnter={pause} onMouseLeave={resume} onTouchStart={pause} onTouchEnd={resume} onFocus={pause} onBlur={resume} tabIndex={0} data-auto-scroll={!shouldReduceMotion} aria-label={t.friends.title}>
+          <div
+            ref={scrollRef}
+            className={`flex gap-2.5 overflow-x-auto py-3 px-4 ${shouldReduceMotion ? "flex-wrap justify-center overflow-visible" : "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"}`}
+            onScroll={syncManualPosition}
+            onPointerDown={pause}
+            onPointerUp={scheduleResume}
+            onPointerCancel={scheduleResume}
+            onPointerLeave={scheduleResume}
+            onWheel={() => { pause(); scheduleResume(); }}
+            onTouchEnd={scheduleResume}
+            onKeyDown={event => {
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End") pause();
+            }}
+            tabIndex={0}
+            data-auto-scroll={!shouldReduceMotion}
+            aria-label={t.friends.title}
+          >
             <div className="flex gap-2.5" role="list">
               {settings.friends.map((friend, i) => <div key={`primary-${friend}-${i}`} role="listitem">{renderFriend(friend, i)}</div>)}
             </div>

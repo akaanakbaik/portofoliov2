@@ -17,15 +17,16 @@ const adminHeaders = () => ({ "Content-Type": "application/json", "X-Admin-Token
 const TABS = ["analytics", "home", "about", "tech", "projects", "friends", "social", "audio", "settings"] as const;
 type Tab = typeof TABS[number];
 
-interface VisitorStats { total: number; today: number; history: { date: string; count: number }[] }
+interface VisitorStats { total: number; today: number; history: { date: string; count: number }[]; generatedAt?: string }
 interface LangStat { language: string; lines: number; percentage: number; color: string }
 interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean }
+interface AdminHealth { ok: boolean; generatedAt: string; uptimeSeconds: number; adminPasswordConfigured: boolean; emailConfigured: boolean; statsStorage: string; messagesStorage: string; lastVisitDate: string | null }
 
 const TAB_CONFIG: { key: Tab; icon: SvgIconName; label: string }[] = [
   { key: "analytics", icon: "analytics", label: "Analitik" },
   { key: "home",      icon: "home", label: "Beranda"  },
   { key: "about",     icon: "user", label: "Tentang"  },
-  { key: "tech",      icon: "code", label: "Tech"     },
+  { key: "tech",      icon: "code", label: "Framework" },
   { key: "projects",  icon: "briefcase", label: "Proyek"   },
   { key: "friends",   icon: "users", label: "Teman"    },
   { key: "social",    icon: "link", label: "Medsos"   },
@@ -129,9 +130,13 @@ export default function Admin() {
   const [sessionLoading, setSessionLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
+  const [activeBubble, setActiveBubble] = useState<Tab | null>(null);
+  const bubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [stats, setStats] = useState<VisitorStats | null>(null);
   const [langStats, setLangStats] = useState<LangStat[]>([]);
   const [messages, setMessages] = useState<ContactMsg[]>([]);
+  const [health, setHealth] = useState<AdminHealth | null>(null);
+  const [lastAnalyticsSync, setLastAnalyticsSync] = useState<Date | null>(null);
   const [draft, setDraft] = useState<PortfolioSettings>({ ...settings });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -144,17 +149,28 @@ export default function Admin() {
     try {
       const token = getAdminToken();
       const hdr = { "X-Admin-Token": token };
-      const [s, l, m] = await Promise.all([
+      const [s, l, m, h] = await Promise.all([
         fetch("/api/analytics/stats").then(r => r.json()).catch(() => null),
         fetch("/api/analytics/lang-stats").then(r => r.json()).catch(() => []),
-        fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => [])
+        fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
       if (s) setStats(s);
       if (Array.isArray(l)) setLangStats(l);
       if (Array.isArray(m)) setMessages(m);
+      if (h) setHealth(h);
     } catch {}
+    setLastAnalyticsSync(new Date());
     setRefreshing(false);
   }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") fetchAnalytics();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [authenticated, fetchAnalytics]);
 
   // Check existing session on mount
   useEffect(() => {
@@ -238,6 +254,17 @@ export default function Admin() {
     if (unsavedTabs.size === 0) return;
     saveChanges();
   };
+
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setActiveBubble(tab);
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+    bubbleTimerRef.current = setTimeout(() => setActiveBubble(null), 1800);
+  };
+
+  useEffect(() => () => {
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+  }, []);
 
   // ── Session loading screen ────────────────────────────────────────────────
   if (sessionLoading) {
@@ -390,27 +417,39 @@ export default function Admin() {
               const isBadge = tab.key === "analytics" && unreadCount > 0;
               const hasUnsaved = unsavedTabs.has(tab.key);
               return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  data-testid={`admin-tab-${tab.key}`}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative"
-                  style={{
-                    background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
-                    color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
-                  }}
-                >
-                  <SvgIcon name={tab.icon} size={14} aria-hidden="true" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  {isBadge && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                  {!isBadge && hasUnsaved && (
-                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  )}
-                </button>
+                <div key={tab.key} className="relative flex-shrink-0">
+                  <button
+                    onClick={() => selectTab(tab.key)}
+                    onFocus={() => selectTab(tab.key)}
+                    data-testid={`admin-tab-${tab.key}`}
+                    aria-label={tab.label}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative"
+                    style={{
+                      background: activeTab === tab.key ? "hsl(var(--primary))" : "transparent",
+                      color: activeTab === tab.key ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))"
+                    }}
+                  >
+                    <SvgIcon name={tab.icon} size={14} aria-hidden="true" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    {isBadge && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10" style={{ background: "#ef4444", color: "white" }}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+                    {!isBadge && hasUnsaved && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                  </button>
+                  <AnimatePresence>
+                    {activeBubble === tab.key && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4, scale: 0.92 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.92 }}
+                        transition={{ duration: 0.16 }}
+                        role="tooltip"
+                        className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] -translate-x-1/2 z-[70] whitespace-nowrap rounded-xl px-2.5 py-1.5 text-[10px] font-semibold text-white"
+                        style={{ background: "rgba(15,23,42,0.78)", border: "1px solid rgba(148,163,184,0.24)", boxShadow: "0 10px 30px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12)", backdropFilter: "blur(16px) saturate(140%)" }}
+                      >
+                        {tab.label}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
           </div>
@@ -427,7 +466,7 @@ export default function Admin() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
           >
-            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} setMessages={setMessages} onRefresh={fetchAnalytics} refreshing={refreshing} />}
+            {activeTab === "analytics" && <AnalyticsTab stats={stats} langStats={langStats} messages={messages} setMessages={setMessages} health={health} lastSync={lastAnalyticsSync} onRefresh={fetchAnalytics} refreshing={refreshing} />}
             {activeTab === "home"      && <HomeTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "about"     && <AboutTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
             {activeTab === "tech"      && <TechTab draft={draft} setDraft={handleDraftChange} onSave={saveChanges} onCancel={cancelChanges} />}
@@ -457,9 +496,10 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 // ── Analytics Tab ──────────────────────────────────────────────────────────────
-function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refreshing }: {
+function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSync, onRefresh, refreshing }: {
   stats: VisitorStats | null; langStats: LangStat[]; messages: ContactMsg[];
-  setMessages: (m: ContactMsg[]) => void; onRefresh: () => void; refreshing: boolean;
+  setMessages: (m: ContactMsg[]) => void; health: AdminHealth | null; lastSync: Date | null;
+  onRefresh: () => void; refreshing: boolean;
 }) {
   const { toast } = useToast();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -521,17 +561,44 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, onRefresh, refr
     toast({ title: "Pesan diekspor", description: `${filteredMsgs.length} pesan masuk ke file CSV` });
   };
 
+  const exportAnalytics = () => {
+    const payload = { exportedAt: new Date().toISOString(), stats, langStats, messages, health };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aka-analytics-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Analytics diekspor", description: "Snapshot data server berhasil diunduh" });
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Statistik kunjungan & pesan masuk</p>
-        <button onClick={onRefresh} disabled={refreshing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-          style={{ background: "hsl(var(--accent))", color: "hsl(var(--foreground))" }}
-          data-testid="refresh-analytics">
-          <motion.span animate={refreshing ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: 0.6, repeat: refreshing ? Infinity : 0, ease: "linear" }}>⟳</motion.span>
-          {refreshing ? "Memuat..." : "Refresh"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs text-muted-foreground">Statistik kunjungan & pesan masuk</p>
+          <p className="text-[10px] text-muted-foreground/70 mt-0.5">{lastSync ? `Sinkron ${lastSync.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Belum tersinkron"} · auto-refresh 30 detik</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={exportAnalytics} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/80 transition-all"><SvgIcon name="download" size={12} aria-hidden="true" />JSON</button>
+          <button onClick={onRefresh} disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: "hsl(var(--accent))", color: "hsl(var(--foreground))" }}
+            data-testid="refresh-analytics">
+            <motion.span animate={refreshing ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: 0.6, repeat: refreshing ? Infinity : 0, ease: "linear" }}><SvgIcon name="refresh" size={12} aria-hidden="true" /></motion.span>
+            {refreshing ? "Memuat..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        {[
+          { label: "API", value: health?.ok ? "Online" : "Belum terhubung", color: health?.ok ? "#22c55e" : "#f59e0b" },
+          { label: "Email", value: health?.emailConfigured ? "Siap" : "Belum dikonfigurasi", color: health?.emailConfigured ? "#22c55e" : "#f59e0b" },
+          { label: "Pesan", value: health?.messagesStorage === "memory-instance" ? "Instance aktif" : "Persisten", color: health?.messagesStorage === "memory-instance" ? "#f59e0b" : "#22c55e" },
+          { label: "Uptime", value: health ? `${Math.floor(health.uptimeSeconds / 60)}m` : "—", color: "#60a5fa" }
+        ].map(item => <div key={item.label} className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}><span className="text-[10px] text-muted-foreground">{item.label}</span><span className="text-[10px] font-bold" style={{ color: item.color }}>{item.value}</span></div>)}
       </div>
 
       {/* Stat cards */}
@@ -1245,7 +1312,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
   const strength = getStrength(newPw);
 
   const changePw = async () => {
-    if (!newPw.trim() || newPw.length < 3) return toast({ title: "Password minimal 3 karakter", variant: "destructive" });
+    if (!newPw.trim() || newPw.length < 10) return toast({ title: "Password minimal 10 karakter", variant: "destructive" });
     if (newPw !== confirmPw) return toast({ title: "Password tidak cocok", variant: "destructive" });
     setPwLoading(true);
     try {
@@ -1464,7 +1531,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
             <SvgIcon name="shield" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
-            <span className="text-muted-foreground">Password tersimpan <strong>di server</strong>, tidak di browser. Untuk perubahan permanen di Vercel, set env var <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di dashboard Vercel.</span>
+            <span className="text-muted-foreground">Password tidak pernah disimpan di browser. Perubahan ini berlaku pada sesi server saat ini; untuk permanen, perbarui secret <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di Vercel.</span>
           </div>
 
           <Field label="Password Baru">
@@ -1475,7 +1542,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
                 onChange={e => setNewPw(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && changePw()}
                 className={inputCls + " pr-10"}
-                placeholder="Minimal 3 karakter..."
+                placeholder="Minimal 10 karakter..."
                 data-testid="new-password-input"
                 autoComplete="new-password"
               />
@@ -1512,12 +1579,12 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             </div>
           )}
 
-          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={!newPw || !confirmPw || newPw !== confirmPw || pwLoading}
+          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={newPw.length < 10 || !confirmPw || newPw !== confirmPw || pwLoading}
             data-testid="save-password-btn"
-            className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
             style={{
-              background: newPw && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
-              color: newPw && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
+              background: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
+              color: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
             }}>
             {pwLoading ? (
               <><motion.span animate={{ rotate: 360 }} transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }} className="block w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> Menyimpan...</>
