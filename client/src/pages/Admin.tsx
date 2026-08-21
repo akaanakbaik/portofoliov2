@@ -285,9 +285,10 @@ export default function Admin() {
                 onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleLogin()}
                 placeholder="Password rahasia..."
+                aria-label="Password admin"
                 data-testid="admin-password-input"
                 autoFocus
-                autoComplete="off"
+                autoComplete="current-password"
                 className="w-full px-4 py-3 pr-10 rounded-xl text-sm outline-none"
                 style={{
                   background: "hsl(var(--background))",
