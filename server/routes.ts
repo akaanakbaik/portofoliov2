@@ -278,6 +278,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/cron/supabase-keepalive", async (req, res) => {
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    const authorization = req.headers.authorization || "";
+    if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+    if (!getSupabaseAnalyticsConfig()) {
+      return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
+    }
+    try {
+      const stats = await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
+      return res.json({ ok: true, storage: "supabase", total: stats.total, today: stats.today, generatedAt: stats.generatedAt });
+    } catch (error) {
+      console.error("[cron/supabase-keepalive] Storage error:", error);
+      return res.status(502).json({ ok: false, error: "Supabase keep-alive failed" });
+    }
+  });
+
   app.get("/api/analytics/lang-stats", (_req, res) => {
     try { res.json(analyzeLangStats()); } catch { res.json([]); }
   });
