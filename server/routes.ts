@@ -110,6 +110,35 @@ function recordVisit() {
   savePersistedStats();
 }
 
+interface SupabaseVisitStats { total: number; today: number; history: VisitRecord[]; generatedAt: string }
+
+function getSupabaseAnalyticsConfig() {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+  return url && key ? { url, key } : null;
+}
+
+async function callSupabaseAnalyticsRpc<T>(functionName: string): Promise<T> {
+  const config = getSupabaseAnalyticsConfig();
+  if (!config) throw new Error("Supabase analytics is not configured");
+  const response = await fetch(`${config.url}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
+    body: "{}"
+  });
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 300);
+    throw new Error(`Supabase RPC ${functionName} failed (${response.status}): ${detail}`);
+  }
+  return await response.json() as T;
+}
+
+async function readAnalyticsStats(): Promise<SupabaseVisitStats> {
+  if (getSupabaseAnalyticsConfig()) return await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
+  const today = new Date().toISOString().slice(0, 10);
+  return { total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory, generatedAt: new Date().toISOString() };
+}
+
 // ─── Contact messages (in-memory; per-instance on Vercel) ────────────────────
 interface ContactMessage { id: string; name: string; email: string; message: string; timestamp: string; read: boolean; }
 const contactMessages: ContactMessage[] = [];
@@ -226,16 +255,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── Analytics ───────────────────────────────────────────────────────────────
-  app.post("/api/analytics/visit", (_req, res) => {
-    try { recordVisit(); } catch { }
-    res.json({ ok: true });
+  app.post("/api/analytics/visit", async (_req, res) => {
+    try {
+      if (getSupabaseAnalyticsConfig()) {
+        await callSupabaseAnalyticsRpc<{ ok: boolean }>("record_portfolio_visit");
+        return res.json({ ok: true, storage: "supabase" });
+      }
+      recordVisit();
+      return res.json({ ok: true, storage: "temporary-instance-file" });
+    } catch (error) {
+      console.error("[analytics/visit] Storage error:", error);
+      return res.status(502).json({ ok: false, error: "Analytics storage unavailable" });
+    }
   });
 
-  app.get("/api/analytics/stats", (_req, res) => {
+  app.get("/api/analytics/stats", async (_req, res) => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      res.json({ total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory, generatedAt: new Date().toISOString() });
-    } catch { res.json({ total: 0, today: 0, history: [], generatedAt: new Date().toISOString() }); }
+      return res.json(await readAnalyticsStats());
+    } catch (error) {
+      console.error("[analytics/stats] Storage error:", error);
+      return res.status(502).json({ error: "Analytics storage unavailable" });
+    }
   });
 
   app.get("/api/analytics/lang-stats", (_req, res) => {
@@ -277,16 +317,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
-  app.get("/api/admin/health", requireAdmin, (_req, res) => {
+  app.get("/api/admin/health", requireAdmin, async (_req, res) => {
+    const supabaseConfigured = Boolean(getSupabaseAnalyticsConfig());
+    let stats: SupabaseVisitStats | null = null;
+    if (supabaseConfigured) {
+      try { stats = await readAnalyticsStats(); } catch { }
+    }
     res.json({
       ok: true,
       generatedAt: new Date().toISOString(),
       uptimeSeconds: Math.round(process.uptime()),
       adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
       emailConfigured: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-      statsStorage: "temporary-instance-file",
+      statsStorage: supabaseConfigured && stats ? "supabase-postgres" : "temporary-instance-file",
       messagesStorage: "memory-instance",
-      lastVisitDate: visitHistory.length ? visitHistory[visitHistory.length - 1].date : null
+      lastVisitDate: stats?.history?.length ? stats.history[stats.history.length - 1].date : visitHistory.length ? visitHistory[visitHistory.length - 1].date : null
     });
   });
 
