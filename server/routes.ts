@@ -55,7 +55,7 @@ function checkLoginRateLimit(ip: string): { allowed: boolean } {
 let runtimeAdminPassword: string | null = null;
 
 function getAdminPassword(): string {
-  return (runtimeAdminPassword ?? process.env.ADMIN_PASSWORD ?? "akaa").trim();
+  return (runtimeAdminPassword ?? process.env.ADMIN_PASSWORD ?? "").trim();
 }
 
 // ─── Require-admin middleware ─────────────────────────────────────────────────
