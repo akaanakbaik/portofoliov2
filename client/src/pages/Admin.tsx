@@ -1633,7 +1633,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             <input value={draft.seo?.keywords || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, keywords: e.target.value } }))} className={inputCls} placeholder="portfolio, developer, Sumatera Barat" />
           </Field>
           <Field label="Canonical URL">
-            <input type="url" value={draft.seo?.canonical || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, canonical: e.target.value } }))} className={inputCls} placeholder="https://akadev.me/" />
+            <input type="url" value={draft.seo?.canonical || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, canonical: e.target.value } }))} className={inputCls} placeholder="https://akaa.dev/" />
           </Field>
           <Field label="Open Graph Image URL">
             <input type="url" value={draft.seo?.ogImage || ""} onChange={e => setDraft((d: any) => ({ ...d, seo: { ...d.seo, ogImage: e.target.value } }))} className={inputCls} placeholder="https://.../og-image.jpg" />
@@ -1641,7 +1641,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
           <div className="rounded-xl p-4 space-y-1.5" style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))" }}>
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Preview Google</p>
             <p className="text-base text-blue-500 line-clamp-1">{draft.seo?.title || "Judul halaman"}</p>
-            <p className="text-xs text-green-600 truncate">{draft.seo?.canonical || "https://akadev.me/"}</p>
+            <p className="text-xs text-green-600 truncate">{draft.seo?.canonical || "https://akaa.dev/"}</p>
             <p className="text-xs text-muted-foreground line-clamp-2">{draft.seo?.description || "Deskripsi meta akan tampil di sini."}</p>
           </div>
           <Field label="Teks Footer">

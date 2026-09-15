@@ -30,7 +30,7 @@ export const PORTFOLIO_CONFIG = {
         id: "Web portofolio pertama yang ku buat dengan eyae",
         en: "My first portfolio website built with eyae"
       },
-      url: "https://akadev.me",
+      url: "https://akaa.dev",
       buttonType: "view"
     },
     {

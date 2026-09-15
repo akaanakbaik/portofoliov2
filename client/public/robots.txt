@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://akadev.me/sitemap.xml
+Sitemap: https://akaa.dev/sitemap.xml

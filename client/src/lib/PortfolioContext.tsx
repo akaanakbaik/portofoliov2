@@ -101,7 +101,7 @@ const defaultSettings: PortfolioSettings = {
     description: "Portfolio Aka, pelajar & developer dari Sumatera Barat Indonesia",
     keywords: "aka, akaanakbaik, portfolio, developer, pelajar, Sumatera Barat, Indonesia, web developer, programming",
     ogImage: PORTFOLIO_CONFIG.photoUrl,
-    canonical: "https://akadev.me/"
+    canonical: "https://akaa.dev/"
   },
   motion: {
     parallaxEnabled: true,
