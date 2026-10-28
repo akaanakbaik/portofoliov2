@@ -337,3 +337,4 @@ html:not(.dark) [data-testid^="visibility-"] { color: #166534 !important; }
 .dark { --warning-text: 43 96% 68%; }
 html:not(.dark) [data-admin-root] .text-emerald-400 { color: #166534; }
 html:not(.dark) [data-admin-root] .text-blue-500 { color: #245ab0; }
+.dark { --destructive: 0 90% 78%; --destructive-foreground: 0 40% 12%; }
