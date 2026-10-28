@@ -1,0 +1,1 @@
+const express=require('express');const path=require('node:path');const app=express();app.use(express.static(path.resolve('dist/public')));app.use((_req,res)=>res.sendFile(path.resolve('dist/public/index.html')));app.listen(5080,'127.0.0.1');

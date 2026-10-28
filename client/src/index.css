@@ -318,3 +318,23 @@
     inset: -1px;
   }
 }
+
+/* Accessible accents retain the original blue palette. */
+.dark { --primary: 211 92% 72%; --primary-foreground: 220 35% 12%; }
+.text-muted-foreground\/50, .text-muted-foreground\/70 { color: hsl(var(--muted-foreground)); }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+:root { --success-text: 142 76% 25%; }
+.dark { --success-text: 142 70% 66%; }
+html:not(.dark) .surface-inverse-card .text-muted-foreground { color: #b8bec7; }
+html:not(.dark) [data-testid="typing-status"] span { color: #245ab0 !important; }
+html:not(.dark) #about h3 { color: #245ab0 !important; }
+html:not(.dark) .text-green-600 { color: #166534; }
+html:not(.dark) [data-testid^="visibility-"] { color: #166534 !important; }
+:root { --warning-text: 32 95% 27%; }
+.dark { --warning-text: 43 96% 68%; }
+html:not(.dark) [data-admin-root] .text-emerald-400 { color: #166534; }
+html:not(.dark) [data-admin-root] .text-blue-500 { color: #245ab0; }
+.dark { --destructive: 0 90% 78%; --destructive-foreground: 0 40% 12%; }

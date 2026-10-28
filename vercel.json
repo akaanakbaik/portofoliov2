@@ -3,14 +3,50 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/server" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ],
   "crons": [
     {
       "path": "/api/cron/supabase-keepalive",
-      "schedule": "0 3 */2 * *"
+      "schedule": "0 3 * * 1,4"
+    }
+  ],
+  "functions": {
+    "api/server.js": {
+      "maxDuration": 60
+    }
+  },
+  "regions": [
+    "icn1"
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data: blob:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://raw.githubusercontent.com; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+      },
+      "continue": true
+    },
+    {
+      "src": "/",
+      "dest": "/api/server"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/server"
+    },
+    {
+      "src": "/(x7k9adm2p4q|preview)",
+      "dest": "/api/server"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/server"
     }
   ]
 }

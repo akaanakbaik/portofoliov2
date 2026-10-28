@@ -1,6 +1,6 @@
 export const PORTFOLIO_CONFIG = {
   name: "aka",
-  photoUrl: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/aka.jpg",
+  photoUrl: "/profile.webp",
   birthDate: "2009-11-17",
   origin: "Sumatera Barat, Indonesia",
   school: "SMAN 1 Lembah Melintang",
@@ -25,7 +25,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "1",
       name: "Portofolio Pertama",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/portofolio%20pertama.jpg",
+      image: "/assets/projects/portfolio-first.webp",
       desc: {
         id: "Web portofolio pertama yang ku buat dengan eyae",
         en: "My first portfolio website built with eyae"
@@ -36,7 +36,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "2",
       name: "Web Tools",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/kaai.jpg",
+      image: "/assets/projects/web-tools.webp",
       desc: {
         id: "Website yang isinya ada ytdl, aichat, aio dan ssweb",
         en: "Website containing ytdl, aichat, aio and ssweb tools"
@@ -47,7 +47,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "3",
       name: "Domku",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/domku.jpg",
+      image: "/assets/projects/domku.webp",
       desc: {
         id: "Web create subdomain gratis",
         en: "Free subdomain creator website"
@@ -58,7 +58,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "4",
       name: "Kabox",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/kabox.jpg",
+      image: "/assets/projects/kabox.webp",
       desc: {
         id: "Web uploader atau CDN gratis",
         en: "Free file uploader or CDN website"
@@ -69,7 +69,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "5",
       name: "Bot WA FurinaAI",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/botfurina.jpg",
+      image: "/assets/projects/furina.webp",
       desc: {
         id: "Bot WA FurinaAI menggunakan JS ESM, silahkan gabung grup jika ingin menggunakannya",
         en: "FurinaAI WhatsApp bot using JS ESM, join the group to use it"
@@ -80,7 +80,7 @@ export const PORTFOLIO_CONFIG = {
     {
       id: "6",
       name: "Profile Card",
-      image: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/profilecard.jpg",
+      image: "/assets/projects/profile-card.webp",
       desc: {
         id: "Web profilecard, web pertama tapi masih menggunakan template",
         en: "Profile card website, my first web built from a template"

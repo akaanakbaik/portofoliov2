@@ -1,6 +1,7 @@
+import {writeLanguageStats} from "./language-stats";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile } from "fs/promises";
+import { rm, readFile, writeFile } from "fs/promises";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -35,8 +36,11 @@ const allowlist = [
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
+  await writeLanguageStats();
   console.log("building client...");
   await viteBuild();
+
+  await writeFile("server/generated-shell.ts", "export const shell = " + JSON.stringify(await readFile("dist/public/index.html", "utf8")) + ";\n");
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
@@ -74,7 +78,7 @@ async function buildAll() {
     platform: "node",
     bundle: true,
     format: "cjs",
-    outfile: "api/server.js",
+    outfile: "dist/api.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
     },
