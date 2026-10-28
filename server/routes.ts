@@ -1,9 +1,7 @@
+import {languageStats} from "./generated-languages";
 import type { Express } from "express";
 import type { Server } from "http";
 import nodemailer from "nodemailer";
-import fs from "fs";
-import path from "path";
-import os from "os";
 import https from "https";
 import http from "http";
 import crypto from "crypto";
@@ -58,65 +56,6 @@ async function readCronDashboard() {
     generatedAt: now.toISOString(),
   };
 }
-// ─── Language stats ───────────────────────────────────────────────────────────
-const LANG_COLORS: Record<string, string> = {
-  TypeScript: "#3178c6",
-  TSX: "#61dafb",
-  JavaScript: "#f7df1e",
-  CSS: "#2965f1",
-  JSON: "#cbcb41",
-  HTML: "#e34c26",
-  Python: "#3572a5",
-  Other: "#888",
-};
-
-function analyzeLangStats() {
-  const stats: Record<string, number> = {};
-  let totalLines = 0;
-  function walkDir(dir: string) {
-    try {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walkDir(full);
-          continue;
-        }
-        const ext = path.extname(entry.name).toLowerCase();
-        const lang =
-          {
-            ".ts": "TypeScript",
-            ".tsx": "TSX",
-            ".js": "JavaScript",
-            ".jsx": "JavaScript",
-            ".css": "CSS",
-            ".json": "JSON",
-            ".html": "HTML",
-          }[ext] || "Other";
-        try {
-          const lines = fs.readFileSync(full, "utf-8").split("\n").length;
-          stats[lang] = (stats[lang] || 0) + lines;
-          totalLines += lines;
-        } catch {}
-      }
-    } catch {}
-  }
-  try {
-    walkDir(path.join(process.cwd(), "client/src"));
-    walkDir(path.join(process.cwd(), "server"));
-  } catch {}
-  if (totalLines === 0) return [];
-  return Object.entries(stats)
-    .filter(([, l]) => l > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([language, lines]) => ({
-      language,
-      lines,
-      percentage: Math.round((lines / totalLines) * 100),
-      color: LANG_COLORS[language] || LANG_COLORS.Other,
-    }));
-}
-
 // ─── Translation ──────────────────────────────────────────────────────────────
 function fetchUrl(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -375,9 +314,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/analytics/lang-stats", (_req, res) => {
+  app.get("/api/analytics/lang-stats", requireAdmin, (_req, res) => {
     try {
-      res.json(analyzeLangStats());
+      res.json(languageStats);
     } catch {
       res.json([]);
     }

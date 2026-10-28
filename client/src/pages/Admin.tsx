@@ -167,7 +167,7 @@ export default function Admin() {
       const hdr = { "X-Admin-Token": token };
       const [s, l, m, h, c] = await Promise.all([
         fetch("/api/analytics/stats").then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch("/api/analytics/lang-stats").then(r => r.json()).catch(() => []),
+        fetch("/api/analytics/lang-stats", {headers:hdr}).then(r => r.json()).catch(() => []),
         fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/admin/cron/status", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
@@ -764,7 +764,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
           <div className="space-y-2.5">
             {langStats.map(s => (
               <div key={s.language} className="flex items-center gap-2.5">
-                <span className="text-[10px] font-mono font-bold w-16 flex-shrink-0" style={{ color: s.color }}>{s.language}</span>
+                <span className="text-[10px] font-mono font-bold w-16 flex-shrink-0" style={{ color: "hsl(var(--foreground))", borderLeft: `3px solid ${s.color}`, paddingLeft: 6 }}>{s.language}</span>
                 <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-accent">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${s.percentage}%` }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                     className="h-full rounded-full" style={{ background: s.color }} />

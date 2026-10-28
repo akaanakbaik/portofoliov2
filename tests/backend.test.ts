@@ -336,3 +336,7 @@ test('database failure never reports contact success and homepage stays readable
  state.failAction='contact.insert';const r=await request('/api/contact','POST',{name:'QA',email:'qa@example.com',message:'A valid fixture message'});assert.equal(r.status,503);assert.equal(state.messages.length,0);
  state.failAction='settings.get';const page=await request('/');assert.equal(page.status,200);assert.match(await page.text(),/Abdul Khaliq Arrasyid/);assert.equal((await request('/api/settings')).status,503);
 });
+
+test('language statistics remain available without source files in the deployment',async()=>{
+ const token=await login();assert.equal((await request('/api/analytics/lang-stats')).status,401);const r=await request('/api/analytics/lang-stats','GET',undefined,token);assert.equal(r.status,200);const stats=await r.json();assert.ok(stats.length>0);assert.ok(stats.every((x:any)=>x.lines>0&&x.percentage>=0&&x.percentage<=100));
+});

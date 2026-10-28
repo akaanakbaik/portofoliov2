@@ -21,3 +21,5 @@ server/generated-shell.ts
 
 playwright-report/
 test-results/
+
+server/generated-languages.ts

@@ -1,3 +1,4 @@
+import {writeLanguageStats} from "./language-stats";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile, writeFile } from "fs/promises";
@@ -35,6 +36,7 @@ const allowlist = [
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
+  await writeLanguageStats();
   console.log("building client...");
   await viteBuild();
 
