@@ -19,6 +19,7 @@ before(() => {
     const { p_action: action, p_data: d } = JSON.parse(init.body);
     let result: any = { ok: true },
       status = 200;
+    if(state.failAction===action)return new Response(JSON.stringify({code:'PGRST000'}),{status:503});
     switch (action) {
       case "settings.get":
         result = { settings: state.settings, version: state.version };
@@ -329,4 +330,9 @@ test("server HTML includes visible identity, projects, canonical and valid schem
     "Abdul Khaliq Arrasyid",
   );
   assert.ok(!html.includes("p_token"));
+});
+
+test('database failure never reports contact success and homepage stays readable',async()=>{
+ state.failAction='contact.insert';const r=await request('/api/contact','POST',{name:'QA',email:'qa@example.com',message:'A valid fixture message'});assert.equal(r.status,503);assert.equal(state.messages.length,0);
+ state.failAction='settings.get';const page=await request('/');assert.equal(page.status,200);assert.match(await page.text(),/Abdul Khaliq Arrasyid/);assert.equal((await request('/api/settings')).status,503);
 });
