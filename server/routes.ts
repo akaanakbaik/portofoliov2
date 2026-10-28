@@ -304,7 +304,7 @@ export async function registerRoutes(
       );
     }),
   );
-  app.get(
+  if(process.env.NODE_ENV!=='development') app.get(
     "/",
     asyncRoute(async (_req, res) => {
       res.type("html").setHeader("Cache-Control", "no-store");
