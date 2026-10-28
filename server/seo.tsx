@@ -21,12 +21,16 @@ const escape = (s: string) =>
       ]!,
   );
 const json = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
+let lastPublishedSettings: PortfolioSettings = defaultSettings;
 export async function renderPage() {
-  const stored = await db("settings.get");
+  let stored;
+  try { stored=await db('settings.get'); }
+  catch { console.error('[seo] Database unavailable; serving last known portfolio content');stored={settings:lastPublishedSettings}; }
   const settings: PortfolioSettings = {
     ...defaultSettings,
     ...stored.settings,
   };
+  lastPublishedSettings=settings;
   const content = renderToString(
     <Router ssrPath="/">
       <MotionConfig reducedMotion="always">
