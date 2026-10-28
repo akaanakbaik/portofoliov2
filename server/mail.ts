@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import {buildEmailHtml} from "./mail-template";
 import { db } from "./backend";
 export function emailConfigured() {
   return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
@@ -32,7 +33,7 @@ export async function deliverMessage(id?: string) {
         replyTo: message.email,
         subject: `Pesan dari ${message.name} — Portfolio aka`,
         text: `${message.name} <${message.email}>\n\n${message.message}`,
-        html: `<h2>Pesan baru — Portfolio aka</h2><p>${escape(message.name)} &lt;${escape(message.email)}&gt;</p><p style="white-space:pre-wrap">${escape(message.message)}</p>`,
+        html: buildEmailHtml(escape(message.name),escape(message.email),escape(message.message)),
         messageId: `<${message.id}@akaa.dev>`,
       });
     } finally {
