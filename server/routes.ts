@@ -368,6 +368,7 @@ export async function registerRoutes(
     "/",
     asyncRoute(async (_req, res) => {
       res.type("html").setHeader("Cache-Control", "no-store");
+      if(process.env.VERCEL_ENV==='preview')res.setHeader('X-Robots-Tag','noindex, follow');
       res.send(await renderPage());
     }),
   );
