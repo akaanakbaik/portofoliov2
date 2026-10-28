@@ -273,3 +273,68 @@ MIT License — bebas digunakan untuk referensi & pembelajaran.
 ---
 
 <p align="center">Made with ❤️ by <b>aka</b> — Sumatera Barat, Indonesia 🇮🇩</p>
+
+## Durable backend and SEO upgrade (October 2026)
+
+The original visual layout, projects, social links and music player are retained.
+The production site is `https://akaa.dev`, backed by this repository.
+
+- Published portfolio settings, revision history, contact messages, password hashes,
+  revoked/expiring admin sessions and rate limits are stored in the private
+  `portfolio_private` schema. Local storage is used only for theme/language;
+  unpublished preview data and the admin token live in session storage.
+- The browser never receives the backend credential. A narrowly scoped RPC gateway
+  requires a random 256-bit application token whose SHA256 hash is stored privately.
+  The server additionally authenticates every admin action. This avoids granting
+  the web app an account-wide service-role key. Do not expose this token as `VITE_*`.
+- Passwords use salted scrypt. First successful deployment initializes the hash from
+  `ADMIN_PASSWORD` on login; subsequent password changes persist in the database
+  and revoke all sessions. Changing the environment alone is not a password reset.
+- Saving publishes a version with optimistic concurrency protection. Preview opens
+  a private, non-indexable tab. Prior versions can be restored into a draft.
+- Contact requests only succeed after database persistence. SMTP delivery is awaited,
+  TLS certificates are verified, and failed messages remain available in the inbox.
+  Scheduled cron retries queued messages (maximum five attempts; claims use leases).
+  SMTP is at-least-once: an interrupted acknowledgement can cause a duplicate email;
+  the stable Message-ID helps mail systems identify it.
+- Vercel runs `/api/cron/supabase-keepalive` at `0 3 * * 1,4` (Monday/Thursday,
+  10:00 WIB). Authorization uses `CRON_SECRET`. The job reads real Supabase data,
+  records success/failure, retries email, and cleans expired rate limits/sessions.
+  Regular requests do not guarantee exemption from provider pause policies.
+- The homepage is rendered into HTML on the server with current published content,
+  canonical metadata and a Person/ProfilePage/WebSite graph. The admin and private
+  preview have noindex headers. Unknown pages return HTTP 404.
+- Search Console through Windsor.ai is read-only: it can report performance but
+  cannot submit sitemaps or request indexing. The public sitemap is
+  `https://akaa.dev/sitemap.xml`; robots.txt advertises it. Search rankings are
+  determined by Google and cannot be guaranteed.
+
+### Development and verification
+
+Use Node 24 (`.nvmrc`). `npm ci`, `npm run check`, `npm run build`, `npm test`,
+then `npm audit`. The build generates individually cached SVG icons and bundles
+`dist/api.cjs`; `api/server.js` is the stable Vercel CommonJS entry point.
+The generated HTML shell is bundled with the API. For production-like local tests,
+run `npm start` after setting the server environment from `.env.example`.
+
+The test suite uses isolated in-memory RPC/SMTP fixtures for password changes and
+email delivery; it must never change the production password or send test emails.
+Real database/browser integration tests must remove their temporary messages and
+revoke temporary sessions after completion. Store no credentials in test artifacts.
+
+### Database operations
+
+Apply the checked-in migrations to the intended project. Provision
+`portfolio_private.state.backend_token_hash` from a separately generated token and
+set that token only on the application host. The same token is shared across
+instances. No unrelated application's tables or policies should be changed.
+Keep the old analytics RPC grants until the new deployment passes verification;
+then apply the final migration restricting legacy RPC access to the backend.
+
+Revision history is for content rollback, not a database backup. Keep migrations
+in Git and verify Supabase backups/PITR availability for the project's plan.
+Before a destructive change, take and verify a provider-supported backup/export.
+Rotate the application token by coordinating the private hash and Vercel secret;
+redeploy after changing environment variables. Recheck the cron dashboard and
+SMTP verification endpoint after deployment. Never log API response bodies that
+contain sessions or private messages.

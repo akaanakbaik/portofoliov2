@@ -56,7 +56,7 @@ export default function SocialSection() {
                 style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))", textDecoration: "none" }}
                 data-testid={`social-${platform}`}
               >
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${info.color}15`, color: info.color }}>
+                <div aria-hidden="true" className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${info.color}15`, color: info.color }}>
                   {info.icon}
                 </div>
                 <span className="text-[11px] font-semibold text-card-foreground">{info.label}</span>

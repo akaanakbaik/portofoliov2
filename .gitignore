@@ -15,3 +15,9 @@ replit.nix
 .local/
 attached_assets/
 generated-icon.png
+
+client/public/assets/stack/
+server/generated-shell.ts
+
+playwright-report/
+test-results/

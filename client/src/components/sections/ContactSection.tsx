@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function ContactSection() {
   const { t, lang } = useLang();
   const { toast } = useToast();
-  const [form, setForm] = useState({ name: "", email: "", message: "" });
+  const [form, setForm] = useState({ name: "", email: "", message: "", website: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -37,7 +37,7 @@ export default function ContactSection() {
       if (!res.ok) throw new Error(data.error || "Request failed");
       setSent(true);
       setErrors({});
-      setForm({ name: "", email: "", message: "" });
+      setForm({ name: "", email: "", message: "", website: "" });
       toast({ title: t.contact.successTitle, description: t.contact.successDesc });
       setTimeout(() => setSent(false), 5000);
     } catch (error) {
@@ -78,15 +78,16 @@ export default function ContactSection() {
               </motion.div>
             ) : (
               <motion.form key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onSubmit={handleSubmit} noValidate className="space-y-4" aria-describedby="contact-helper">
+                <div className="hidden" aria-hidden="true"><label htmlFor="contact-website">Website</label><input id="contact-website" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={e=>updateField("website",e.target.value)}/></div>
                 <p id="contact-helper" className="text-xs text-muted-foreground">{lang === "id" ? "Saya akan membaca pesanmu dan membalas melalui email." : "I will read your message and reply by email."}</p>
                 <div>
                   <label htmlFor="contact-name" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">{t.contact.name}</label>
-                  <input id="contact-name" name="name" autoComplete="name" type="text" value={form.name} onChange={e => updateField("name", e.target.value)} placeholder={t.contact.namePlaceholder} required aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "contact-name-error" : undefined} data-testid="contact-name" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring" style={fieldStyle} onFocus={fieldFocus} onBlur={fieldBlur} />
+                  <input id="contact-name" maxLength={100} name="name" autoComplete="name" type="text" value={form.name} onChange={e => updateField("name", e.target.value)} placeholder={t.contact.namePlaceholder} required aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "contact-name-error" : undefined} data-testid="contact-name" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring" style={fieldStyle} onFocus={fieldFocus} onBlur={fieldBlur} />
                   {errors.name && <p id="contact-name-error" className="mt-1 text-xs text-destructive" role="alert">{errors.name}</p>}
                 </div>
                 <div>
                   <label htmlFor="contact-email" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">{t.contact.email}</label>
-                  <input id="contact-email" name="email" autoComplete="email" type="email" value={form.email} onChange={e => updateField("email", e.target.value)} placeholder={t.contact.emailPlaceholder} required aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "contact-email-error" : undefined} data-testid="contact-email" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring" style={fieldStyle} onFocus={fieldFocus} onBlur={fieldBlur} />
+                  <input id="contact-email" maxLength={254} name="email" autoComplete="email" type="email" value={form.email} onChange={e => updateField("email", e.target.value)} placeholder={t.contact.emailPlaceholder} required aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "contact-email-error" : undefined} data-testid="contact-email" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring" style={fieldStyle} onFocus={fieldFocus} onBlur={fieldBlur} />
                   {errors.email && <p id="contact-email-error" className="mt-1 text-xs text-destructive" role="alert">{errors.email}</p>}
                 </div>
                 <div>

@@ -1,6 +1,6 @@
 export const PORTFOLIO_CONFIG = {
   name: "aka",
-  photoUrl: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/aka.jpg",
+  photoUrl: "/profile.webp",
   birthDate: "2009-11-17",
   origin: "Sumatera Barat, Indonesia",
   school: "SMAN 1 Lembah Melintang",

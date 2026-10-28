@@ -105,6 +105,7 @@ export default function AudioPlayer() {
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
+      audioRef.current.preload = "none";
       audioRef.current.volume = 0.7;
     }
     const audio = audioRef.current;
@@ -276,7 +277,7 @@ export default function AudioPlayer() {
                   <div
                     className="mt-1.5 w-full h-0.5 rounded-full cursor-pointer"
                     style={{ background: "rgba(255,255,255,0.08)" }}
-                    onClick={seek}
+                    role="slider" tabIndex={0} aria-label="Posisi pemutaran" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const audio=audioRef.current;if(audio)audio.currentTime=Math.max(0,Math.min(audio.duration||0,audio.currentTime+(e.key==='ArrowRight'?5:-5)));}}} onClick={seek}
                   >
                     <motion.div
                       className="h-full rounded-full"
@@ -291,6 +292,7 @@ export default function AudioPlayer() {
                   onClick={togglePlay}
                   className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
                   style={{ background: "hsl(217 91% 58%)" }}
+                  aria-label={isPlaying ? "Jeda musik" : "Putar musik"}
                   data-testid="audio-play-pause"
                 >
                   <AnimatePresence mode="wait">
@@ -315,6 +317,8 @@ export default function AudioPlayer() {
                   }}
                   className="w-5 h-5 flex items-center justify-center transition-colors flex-shrink-0"
                   style={{ color: "rgba(255,255,255,0.38)" }}
+                  aria-label={isExpanded ? "Perkecil pemutar" : "Perluas pemutar"}
+                  aria-expanded={isExpanded}
                   data-testid="audio-expand"
                 >
                   {isExpanded ? <MinimizeIcon /> : <ExpandIcon />}
@@ -339,7 +343,7 @@ export default function AudioPlayer() {
                       <div
                         className="w-full h-1 rounded-full cursor-pointer group relative"
                         style={{ background: "rgba(255,255,255,0.08)" }}
-                        onClick={seek}
+                        role="slider" tabIndex={0} aria-label="Posisi pemutaran" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const audio=audioRef.current;if(audio)audio.currentTime=Math.max(0,Math.min(audio.duration||0,audio.currentTime+(e.key==='ArrowRight'?5:-5)));}}} onClick={seek}
                       >
                         <div
                           className="h-full rounded-full relative"
@@ -351,11 +355,11 @@ export default function AudioPlayer() {
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <motion.button whileTap={{ scale: 0.82 }} onClick={prev} className="transition-colors" style={{ color: "rgba(255,255,255,0.45)" }} data-testid="audio-prev"><PrevIcon /></motion.button>
-                          <motion.button whileTap={{ scale: 0.82 }} onClick={next} className="transition-colors" style={{ color: "rgba(255,255,255,0.45)" }} data-testid="audio-next"><NextIcon /></motion.button>
+                          <motion.button whileTap={{ scale: 0.82 }} onClick={prev} className="transition-colors" style={{ color: "rgba(255,255,255,0.45)" }} aria-label="Lagu sebelumnya" data-testid="audio-prev"><PrevIcon /></motion.button>
+                          <motion.button whileTap={{ scale: 0.82 }} onClick={next} className="transition-colors" style={{ color: "rgba(255,255,255,0.45)" }} aria-label="Lagu berikutnya" data-testid="audio-next"><NextIcon /></motion.button>
                         </div>
                         <div className="flex items-center gap-2">
-                          <motion.button whileTap={{ scale: 0.82 }} onClick={() => setMuted(m => !m)} className="transition-colors" style={{ color: "rgba(255,255,255,0.38)" }}>
+                          <motion.button whileTap={{ scale: 0.82 }} aria-label={muted ? "Aktifkan suara" : "Bisukan"} onClick={() => setMuted(m => !m)} className="transition-colors" style={{ color: "rgba(255,255,255,0.38)" }}>
                             <VolumeIcon muted={muted} />
                           </motion.button>
                           <input
@@ -371,7 +375,7 @@ export default function AudioPlayer() {
                             }}
                             className="w-16 h-0.5 accent-blue-400 cursor-pointer"
                             style={{ appearance: "auto" }}
-                            data-testid="audio-volume"
+                            aria-label="Volume musik" data-testid="audio-volume"
                           />
                         </div>
                       </div>

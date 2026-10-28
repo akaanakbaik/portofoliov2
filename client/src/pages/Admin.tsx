@@ -5,7 +5,7 @@ import { usePortfolio, type PortfolioSettings, type ProjectItem, type PlaylistIt
 import { useLang } from "@/lib/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { PORTFOLIO_CONFIG, calculateAge } from "@/lib/config";
-import StackIcon from "tech-stack-icons";
+import StackIcon from "@/components/StackIcon";
 import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
 import { SchoolLogo } from "@/components/SchoolLogo";
 
@@ -19,7 +19,7 @@ type Tab = typeof TABS[number];
 
 interface VisitorStats { total: number; today: number; history: { date: string; count: number }[]; generatedAt?: string }
 interface LangStat { language: string; lines: number; percentage: number; color: string }
-interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean }
+interface ContactMsg { id: string; name: string; email: string; message: string; timestamp: string; read: boolean; emailStatus?: string }
 interface AdminHealth { ok: boolean; generatedAt: string; uptimeSeconds: number; adminPasswordConfigured: boolean; emailConfigured: boolean; statsStorage: string; messagesStorage: string; lastVisitDate: string | null }
 interface CronRun { id: number; job_name: string; trigger_type: "scheduled" | "manual"; status: "running" | "success" | "failed"; started_at: string; completed_at: string | null; duration_ms: number | null; response: unknown; error_message: string | null; created_at: string }
 interface CronDashboard { jobName: string; schedule: string; timezone: string; nextScheduledAt: string; lastSuccessAt: string | null; totalRuns: number; successRuns: number; failedRuns: number; latest: CronRun | null; runs: CronRun[]; generatedAt: string }
@@ -60,8 +60,10 @@ function Card({ title, subtitle, badge, children }: { title: React.ReactNode; su
 }
 
 function Field({ label, hint, row, children }: { label: string; hint?: string; row?: React.ReactNode; children: React.ReactNode }) {
+  const ref=useRef<HTMLDivElement>(null);
+  useEffect(()=>{ref.current?.querySelectorAll('input,textarea,select').forEach((el,i)=>{if(!el.hasAttribute('aria-label'))el.setAttribute('aria-label',i?`${label} ${i+1}`:label);});},[label,children]);
   return (
-    <div className="space-y-1.5">
+    <div ref={ref} role="group" aria-label={label} className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <label className="text-xs font-semibold text-foreground/65 uppercase tracking-wide">{label}</label>
@@ -79,7 +81,7 @@ function SaveBar({ onSave, onCancel }: { onSave: () => void; onCancel: () => voi
     <div className="flex items-center gap-2 pt-4 border-t border-border/40 mt-2">
       <motion.button whileTap={{ scale: 0.95 }} onClick={onSave} data-testid="admin-save"
         className="px-5 py-2.5 rounded-xl text-xs font-bold" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", color: "white" }}>
-        Simpan Perubahan
+        Publikasikan Perubahan
       </motion.button>
       <motion.button whileTap={{ scale: 0.95 }} onClick={onCancel} data-testid="admin-cancel"
         className="px-4 py-2.5 rounded-xl text-xs font-medium bg-secondary text-secondary-foreground">
@@ -97,7 +99,7 @@ async function autoTranslate(text: string): Promise<string | null> {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const res = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: source }), signal: controller.signal });
+      const res = await fetch("/api/translate", { method: "POST", headers: adminHeaders(), body: JSON.stringify({ text: source }), signal: controller.signal });
       const data = await res.json().catch(() => null);
       if (res.ok && typeof data?.result === "string" && data.result.trim()) return data.result.trim();
       if (res.status !== 429 && res.status < 500) return null;
@@ -112,7 +114,7 @@ function TranslateBtn({ onClick, loading }: { onClick: () => void; loading: bool
   return (
     <motion.button type="button" whileTap={{ scale: 0.93 }} onClick={onClick} disabled={loading}
       className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all flex-shrink-0"
-      style={{ background: loading ? "hsl(var(--muted))" : "rgba(59,130,246,0.12)", color: loading ? "hsl(var(--muted-foreground))" : "#60a5fa", border: "1px solid rgba(59,130,246,0.2)" }}
+      style={{ background: loading ? "hsl(var(--muted))" : "rgba(59,130,246,0.12)", color: loading ? "hsl(var(--muted-foreground))" : "hsl(var(--primary))", border: "1px solid rgba(59,130,246,0.2)" }}
       title="Auto translate ID → EN">
       {loading ? (
         <motion.span animate={{ rotate: 360 }} transition={{ duration: 0.7, repeat: Infinity, ease: "linear" }} className="block w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
@@ -134,6 +136,7 @@ export default function Admin() {
   const { t } = useLang();
   const { toast } = useToast();
 
+  useEffect(()=>{document.title='Admin — aka Portfolio';document.querySelector('meta[name="robots"]')?.setAttribute('content','noindex, nofollow');},[]);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -163,13 +166,13 @@ export default function Admin() {
       const token = getAdminToken();
       const hdr = { "X-Admin-Token": token };
       const [s, l, m, h, c] = await Promise.all([
-        fetch("/api/analytics/stats").then(r => r.json()).catch(() => null),
+        fetch("/api/analytics/stats").then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/analytics/lang-stats").then(r => r.json()).catch(() => []),
         fetch("/api/messages", { headers: hdr }).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch("/api/admin/health", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/admin/cron/status", { headers: hdr }).then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
-      if (s) setStats(s);
+      if (s && typeof s.total === "number") setStats(s);
       if (Array.isArray(l)) setLangStats(l);
       if (Array.isArray(m)) setMessages(m);
       if (h) setHealth(h);
@@ -252,11 +255,13 @@ export default function Admin() {
     setAuthenticated(false);
   };
 
-  const saveChanges = () => {
-    updateSettings(draft);
+  const saveChanges = async () => {
+    try {
+    await updateSettings(draft);
     setUnsavedTabs(new Set());
     setLastSavedAt(new Date());
-    toast({ title: "Tersimpan", description: "Perubahan berhasil disimpan" });
+    toast({ title: "Tersimpan", description: "Perubahan dipublikasikan dan terlihat oleh semua pengunjung" });
+    } catch(error) { toast({title:"Gagal menyimpan",description:error instanceof Error?error.message:"Coba lagi",variant:"destructive"}); }
   };
 
   const cancelChanges = () => {
@@ -339,7 +344,7 @@ export default function Admin() {
                   transition: "border-color 0.2s"
                 }}
               />
-              <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+              <button type="button" aria-label={showPw ? "Sembunyikan password" : "Tampilkan password"} onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                 <EyeIcon open={showPw} />
               </button>
             </motion.div>
@@ -386,7 +391,7 @@ export default function Admin() {
 
   // ── Main dashboard ────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div data-admin-root className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/90 backdrop-blur-xl border-b border-border/60">
         <div className="max-w-3xl mx-auto px-4 relative">
@@ -409,6 +414,7 @@ export default function Admin() {
                   </div>
                 )}
                 {lastSavedAt && unsavedTabs.size === 0 && <span className="hidden lg:inline text-[10px] text-muted-foreground">Tersimpan {lastSavedAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+                <button type="button" onClick={()=>{sessionStorage.setItem('aka-preview',JSON.stringify(draft));window.open('/preview','_blank');}} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-accent">Pratinjau</button>
                 {unsavedTabs.size > 0 && <button onClick={saveAllChanges} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>Simpan Semua</button>}
                 <button onClick={() => navigate("/")} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-all">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -537,25 +543,22 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
     { label: "Pesan Masuk",     value: messages.length,     icon: "mail" as SvgIconName, color: "#8b5cf6", badge: unread > 0 ? unread : undefined },
   ];
 
+  const mutateMessage = async (id:string,method:string,suffix='') => {
+    const response=await fetch(`/api/messages/${id}${suffix}`,{method,headers:adminHeaders()});
+    if(!response.ok)throw new Error('Perubahan pesan gagal disimpan');
+  };
   const markRead = async (id: string) => {
-    setMessages(messages.map(m => m.id === id ? { ...m, read: true } : m));
-    await fetch(`/api/messages/${id}/read`, { method: "PATCH", headers: { "X-Admin-Token": getAdminToken() } });
+    try{await mutateMessage(id,'PATCH','/read');setMessages(messages.map(m=>m.id===id?{...m,read:true}:m));}
+    catch{toast({title:'Gagal menandai pesan',variant:'destructive'});}
   };
-
   const markAllRead = async () => {
-    const unreadIds = messages.filter(m => !m.read).map(m => m.id);
-    setMessages(messages.map(m => ({ ...m, read: true })));
-    await Promise.all(unreadIds.map(id =>
-      fetch(`/api/messages/${id}/read`, { method: "PATCH", headers: { "X-Admin-Token": getAdminToken() } })
-    ));
-    toast({ title: "Semua pesan ditandai dibaca" });
+    try{await Promise.all(messages.filter(m=>!m.read).map(m=>mutateMessage(m.id,'PATCH','/read')));setMessages(messages.map(m=>({...m,read:true})));toast({title:'Semua pesan ditandai dibaca'});}
+    catch{toast({title:'Sebagian pesan belum tersimpan. Refresh untuk memeriksa.',variant:'destructive'});}
   };
-
   const deleteMsg = async (id: string) => {
     setDeletingId(id);
-    await fetch(`/api/messages/${id}`, { method: "DELETE", headers: { "X-Admin-Token": getAdminToken() } });
-    setMessages(messages.filter(m => m.id !== id));
-    setDeletingId(null);
+    try{await mutateMessage(id,'DELETE');setMessages(messages.filter(m=>m.id!==id));}
+    catch{toast({title:'Gagal menghapus pesan',variant:'destructive'});}finally{setDeletingId(null);}
   };
 
   const filteredMsgs = messages
@@ -564,7 +567,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
     .sort((a, b) => sortNewest ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   const exportMessages = () => {
-    const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const escapeCsv = (value: string) => `"${( /^[=+\-@\t\r]/.test(value) ? "'" + value : value).replace(/"/g, '""')}"`;
     const rows = [
       ["Nama", "Email", "Pesan", "Waktu", "Status"],
       ...filteredMsgs.map(m => [m.name, m.email, m.message, new Date(m.timestamp).toLocaleString("id-ID"), m.read ? "Dibaca" : "Belum dibaca"])
@@ -617,7 +620,7 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
           { label: "Email", value: health?.emailConfigured ? "Siap" : "Belum dikonfigurasi", color: health?.emailConfigured ? "#22c55e" : "#f59e0b" },
           { label: "Pesan", value: health?.messagesStorage === "memory-instance" ? "Instance aktif" : "Persisten", color: health?.messagesStorage === "memory-instance" ? "#f59e0b" : "#22c55e" },
           { label: "Uptime", value: health ? `${Math.floor(health.uptimeSeconds / 60)}m` : "—", color: "#60a5fa" }
-        ].map(item => <div key={item.label} className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}><span className="text-[10px] text-muted-foreground">{item.label}</span><span className="text-[10px] font-bold" style={{ color: item.color }}>{item.value}</span></div>)}
+        ].map(item => <div key={item.label} className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--card-border))" }}><span className="text-[10px] text-muted-foreground">{item.label}</span><span className="text-[10px] font-bold" style={{ color: item.color === "#f59e0b" ? "hsl(var(--warning-text))" : item.color === "#22c55e" ? "hsl(var(--success-text))" : item.color === "#60a5fa" ? "hsl(var(--primary))" : item.color }}>{item.value}</span></div>)}
       </div>
 
       {/* Stat cards */}
@@ -723,12 +726,12 @@ function AnalyticsTab({ stats, langStats, messages, setMessages, health, lastSyn
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                           {!msg.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
-                          <span className="text-xs font-bold text-foreground">{msg.name}</span>
+                          <button type="button" aria-expanded={expandedId===msg.id} className="text-xs font-bold text-foreground text-left" onClick={e=>{e.stopPropagation();if(!msg.read)markRead(msg.id);setExpandedId(expandedId===msg.id?null:msg.id);}}>{msg.name}</button>
                           <span className="text-[10px] text-muted-foreground">·</span>
                           <span className="text-[10px] text-muted-foreground truncate">{msg.email}</span>
                         </div>
                         <p className={`text-[11px] text-muted-foreground mt-0.5 ${expandedId === msg.id ? "" : "line-clamp-2"}`}>{msg.message}</p>
-                        <p className="text-[10px] text-muted-foreground/50 mt-1">{new Date(msg.timestamp).toLocaleString("id-ID")}</p>
+                        <p className="text-[10px] text-muted-foreground/50 mt-1">{new Date(msg.timestamp).toLocaleString("id-ID")} · Email: {msg.emailStatus || "pending"}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <a href={`mailto:${msg.email}?subject=Re: Pesan Portfolio`} onClick={e => e.stopPropagation()}
@@ -830,12 +833,12 @@ function CronTab({ cron, onRefresh }: { cron: CronDashboard | null; onRefresh: (
   return (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-3 gap-3">
-        <div className="rounded-2xl p-4 sm:col-span-2" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.2), rgba(30,41,59,0.45))", border: "1px solid rgba(96,165,250,0.25)" }}>
+        <div className="rounded-2xl p-4 sm:col-span-2" style={{ background: "linear-gradient(135deg, #102447, #1e293b)", border: "1px solid rgba(96,165,250,0.25)" }}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-[0.18em] text-blue-200/70 font-bold">Supabase Keep-Alive</p>
               <h2 className="text-lg font-bold text-white mt-1">Cron otomatis aktif</h2>
-              <p className="text-xs text-blue-100/70 mt-1">Query read-only berjalan sesuai jadwal untuk menjaga aktivitas database.</p>
+              <p className="text-xs text-blue-100/70 mt-1">Berjalan Senin dan Kamis pukul 10.00 WIB untuk memeriksa database dan mengulang pengiriman email tertunda.</p>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold text-emerald-200 bg-emerald-400/10 border border-emerald-400/20"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {status === "failed" ? "Perlu perhatian" : "Terproteksi"}</span>
           </div>
@@ -843,7 +846,7 @@ function CronTab({ cron, onRefresh }: { cron: CronDashboard | null; onRefresh: (
             <div>
               <p className="text-[10px] text-blue-100/60 uppercase tracking-wide">Cron berikutnya</p>
               <p className="text-2xl sm:text-3xl font-bold tabular-nums text-white mt-1" aria-live="polite">{nextAt ? formatCountdown(remaining) : "Menghitung..."}</p>
-              <p className="text-[11px] text-blue-100/60 mt-1">{formatCronDate(cron?.nextScheduledAt)} · {cron?.schedule || "0 3 */2 * *"} UTC</p>
+              <p className="text-[11px] text-blue-100/60 mt-1">{formatCronDate(cron?.nextScheduledAt)} · {cron?.schedule || "0 3 * * 1,4"} UTC</p>
             </div>
             <button onClick={runManual} disabled={running} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50 transition-transform active:scale-[0.97]" style={{ background: "linear-gradient(135deg, #2563eb, #4f46e5)" }}>
               <SvgIcon name="refresh" size={14} aria-hidden="true" /> {running ? "Menjalankan..." : "Jalankan Manual"}
@@ -864,7 +867,7 @@ function CronTab({ cron, onRefresh }: { cron: CronDashboard | null; onRefresh: (
           <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.latest?.completed_at || cron?.latest?.started_at)}</p><p className="text-[10px] text-muted-foreground mt-1">{cron?.latest?.trigger_type === "manual" ? "Manual dari AdminDashboard" : "Terjadwal otomatis"}</p></div>
           <div className="rounded-xl p-3 bg-accent/40"><p className="text-[10px] text-muted-foreground uppercase tracking-wide">Run sukses terakhir</p><p className="text-sm font-semibold text-foreground mt-1">{formatCronDate(cron?.lastSuccessAt)}</p><p className="text-[10px] text-muted-foreground mt-1">Database: Supabase PostgreSQL</p></div>
         </div>
-        <div className="overflow-x-auto -mx-2">
+        <div tabIndex={0} role="region" aria-label="Riwayat cron" className="overflow-x-auto -mx-2">
           <table className="w-full text-left text-xs min-w-[600px]"><thead><tr className="text-[10px] text-muted-foreground uppercase tracking-wide border-b border-border/50"><th className="px-2 py-2 font-semibold">Waktu</th><th className="px-2 py-2 font-semibold">Trigger</th><th className="px-2 py-2 font-semibold">Status</th><th className="px-2 py-2 font-semibold">Durasi</th><th className="px-2 py-2 font-semibold">Pesan</th></tr></thead><tbody>{cron?.runs?.length ? cron.runs.map(run => <tr key={run.id} className="border-b border-border/30 last:border-0"><td className="px-2 py-2.5 text-foreground/80">{formatCronDate(run.completed_at || run.started_at)}</td><td className="px-2 py-2.5 text-muted-foreground">{run.trigger_type === "manual" ? "Manual" : "Otomatis"}</td><td className="px-2 py-2.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${run.status === "success" ? "bg-emerald-500/10 text-emerald-400" : run.status === "failed" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"}`}>{run.status}</span></td><td className="px-2 py-2.5 text-muted-foreground">{run.duration_ms == null ? "—" : `${run.duration_ms} ms`}</td><td className="px-2 py-2.5 max-w-[220px] truncate text-muted-foreground">{run.error_message || (run.status === "success" ? "Supabase merespons normal" : "Menunggu hasil")}</td></tr>) : <tr><td colSpan={5} className="px-2 py-8 text-center text-muted-foreground">Belum ada riwayat. Jalankan cron manual untuk membuat log pertama.</td></tr>}</tbody></table>
         </div>
       </Card>
@@ -1038,7 +1041,7 @@ function TechTab({ draft, setDraft, onSave, onCancel }: any) {
             {(Object.entries(CAT_META) as [string, { label: string; icon: SvgIconName; color: string }][]).map(([key, meta]) => (
               <button key={key} onClick={() => setAddCat(key as any)}
                 className="flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all"
-                style={{ background: addCat === key ? `${meta.color}18` : "hsl(var(--accent)/0.5)", border: `1.5px solid ${addCat === key ? meta.color : "transparent"}`, color: addCat === key ? meta.color : "hsl(var(--muted-foreground))" }}
+                style={{ background: addCat === key ? `${meta.color}18` : "hsl(var(--accent)/0.5)", border: `1.5px solid ${addCat === key ? meta.color : "transparent"}`, color: addCat === key ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))" }}
                 data-testid={`cat-select-${key}`}>
                 <SvgIcon name={meta.icon} size={18} aria-hidden="true" />
                 <span className="text-[10px]">{key}</span>
@@ -1352,7 +1355,7 @@ function FriendsTab({ draft, setDraft, onSave, onCancel }: any) {
                   className="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full text-xs font-medium"
                   style={{ background: "hsl(var(--accent))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}>
                   <span>{f}</span>
-                  <button onClick={() => removeFriend(f)} className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-colors text-muted-foreground" data-testid={`remove-friend-${i}`}>
+                  <button onClick={() => removeFriend(f)} className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-colors text-muted-foreground" aria-label={`Hapus teman ${f}`} data-testid={`remove-friend-${i}`}>
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </button>
                 </motion.div>
@@ -1464,6 +1467,8 @@ function AudioTab({ draft, setDraft, onSave, onCancel }: any) {
 
 // ── Settings Tab ───────────────────────────────────────────────────────────────
 function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: any) {
+  const [history,setHistory]=useState<{version:number;settings:PortfolioSettings;created_at:string}[]>([]);
+  useEffect(()=>{fetch('/api/admin/settings/history',{headers:adminHeaders()}).then(r=>r.ok?r.json():[]).then(setHistory).catch(()=>{});},[]);
   const { toast } = useToast();
   const [clock, setClock] = useState(new Date());
   const [confirmReset, setConfirmReset] = useState(false);
@@ -1495,7 +1500,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
   const strength = getStrength(newPw);
 
   const changePw = async () => {
-    if (!newPw.trim() || newPw.length < 10) return toast({ title: "Password minimal 10 karakter", variant: "destructive" });
+    if (!newPw.trim() || newPw.length < 12) return toast({ title: "Password minimal 12 karakter", variant: "destructive" });
     if (newPw !== confirmPw) return toast({ title: "Password tidak cocok", variant: "destructive" });
     setPwLoading(true);
     try {
@@ -1512,10 +1517,10 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
     setPwLoading(false);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
-    onReset(); setConfirmReset(false);
-    toast({ title: "Reset berhasil", description: "Semua pengaturan dikembalikan ke default" });
+    try { await onReset(); setConfirmReset(false);
+    toast({ title: "Reset berhasil", description: "Pengaturan default telah dipublikasikan" }); } catch(error) { toast({title:"Reset gagal",description:error instanceof Error?error.message:"Coba lagi",variant:"destructive"}); }
   };
 
   const exportSettings = () => {
@@ -1665,6 +1670,9 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
         <SaveBar onSave={onSave} onCancel={onCancel} />
       </Card>
 
+      <Card title="Riwayat publikasi" subtitle="Pulihkan versi sebelumnya sebagai draft, lalu tinjau dan publikasikan.">
+        {history.length===0?<p className="text-sm text-muted-foreground">Belum ada versi sebelumnya.</p>:history.map(item=><div key={item.version} className="flex items-center justify-between gap-3 py-2 text-sm"><span>Versi {item.version} · {new Date(item.created_at).toLocaleString('id-ID')}</span><button type="button" className="rounded-lg px-3 py-2 bg-accent" onClick={()=>setDraft(()=>item.settings)}>Pulihkan sebagai draft</button></div>)}
+      </Card>
       {/* Export/Import */}
       <Card title={<IconText icon="package">Ekspor / Impor Pengaturan</IconText>} subtitle="Backup atau restore semua pengaturan">
         <div className="flex flex-wrap gap-2">
@@ -1714,7 +1722,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
         <div className="space-y-3">
           <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
             <SvgIcon name="shield" size={16} className="text-blue-400 flex-shrink-0" aria-hidden="true" />
-            <span className="text-muted-foreground">Password tidak pernah disimpan di browser. Perubahan ini berlaku pada sesi server saat ini; untuk permanen, perbarui secret <code className="font-mono bg-accent px-1 py-0.5 rounded text-[10px]">ADMIN_PASSWORD</code> di Vercel.</span>
+            <span className="text-muted-foreground">Password disimpan sebagai hash di database. Mengubah password akan mengakhiri semua sesi admin; masuk kembali setelah perubahan.</span>
           </div>
 
           <Field label="Password Baru">
@@ -1729,7 +1737,7 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
                 data-testid="new-password-input"
                 autoComplete="new-password"
               />
-              <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+              <button type="button" aria-label="Tampilkan atau sembunyikan password baru" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                 <EyeIcon open={showNewPw} />
               </button>
             </div>
@@ -1762,12 +1770,12 @@ function SettingsTab({ draft, setDraft, onSave, onCancel, onReset, onLogout }: a
             </div>
           )}
 
-          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={newPw.length < 10 || !confirmPw || newPw !== confirmPw || pwLoading}
+          <motion.button whileTap={{ scale: 0.96 }} onClick={changePw} disabled={newPw.length < 12 || !confirmPw || newPw !== confirmPw || pwLoading}
             data-testid="save-password-btn"
               className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
             style={{
-              background: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
-              color: newPw.length >= 10 && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
+              background: newPw.length >= 12 && confirmPw && newPw === confirmPw ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "hsl(var(--muted))",
+              color: newPw.length >= 12 && confirmPw && newPw === confirmPw ? "white" : "hsl(var(--muted-foreground))"
             }}>
             {pwLoading ? (
               <><motion.span animate={{ rotate: 360 }} transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }} className="block w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> Menyimpan...</>

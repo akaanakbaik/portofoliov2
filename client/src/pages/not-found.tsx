@@ -12,8 +12,8 @@ export default function NotFound() {
           </div>
 
           <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
+            Halaman yang Anda cari tidak ditemukan.
+          </p><a href="/" className="mt-4 inline-block text-blue-700 underline">Kembali ke beranda</a>
         </CardContent>
       </Card>
     </div>

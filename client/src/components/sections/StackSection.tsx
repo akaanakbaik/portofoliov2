@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import StackIcon from "tech-stack-icons";
+import StackIcon from "@/components/StackIcon";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 import { PORTFOLIO_CONFIG } from "@/lib/config";

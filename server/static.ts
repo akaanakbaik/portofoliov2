@@ -12,8 +12,11 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("/{*path}", (_req, res) => {
+  // Preserve real 404 status while letting the client render its matching page.
+  app.use("/{*path}", (req, res) => {
+    const known=["/x7k9adm2p4q","/preview"].includes(req.path);
+    res.status(known?200:404);
+    res.setHeader("X-Robots-Tag","noindex, nofollow");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

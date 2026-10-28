@@ -82,9 +82,11 @@ export default function Header({ onMenuClick }: HeaderProps) {
       <div className="absolute inset-0 bg-background/80 backdrop-blur-xl border-b border-border/50" />
       <div className="relative max-w-6xl mx-auto px-4 h-full flex items-center justify-between">
         <motion.button
+          aria-haspopup="dialog"
+          aria-controls="navigation-panel"
           data-testid="sidebar-toggle"
           onClick={onMenuClick}
-          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-lg hover:bg-accent/60 transition-all duration-200"
+          className="w-11 h-11 flex flex-col items-center justify-center gap-1.5 rounded-lg hover:bg-accent/60 transition-all duration-200"
           whileTap={{ scale: 0.92 }}
           aria-label={lang === "id" ? "Buka menu navigasi" : "Open navigation menu"}
         >
@@ -126,7 +128,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <motion.button
             data-testid="theme-toggle"
             onClick={handleThemeToggle}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-accent/40 hover:bg-accent/80 border border-border/50 transition-all duration-200 text-foreground/80"
+            className="w-11 h-11 flex items-center justify-center rounded-lg bg-accent/40 hover:bg-accent/80 border border-border/50 transition-all duration-200 text-foreground/80"
             whileTap={{ scale: 0.92 }}
             aria-label={theme === "dark" ? (lang === "id" ? "Aktifkan mode terang" : "Enable light mode") : (lang === "id" ? "Aktifkan mode gelap" : "Enable dark mode")}
           >

@@ -9,174 +9,84 @@ import http from "http";
 import crypto from "crypto";
 import { translate as translateGoogle } from "@vitalets/google-translate-api";
 
-// ─── Stateless HMAC token (works across Vercel serverless instances) ──────────
-// SESSION_SECRET must match across all Vercel instances (set in Vercel env vars)
-const TOKEN_SECRET = process.env.SESSION_SECRET || "aka-portfolio-default-secret-2026";
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+import {
+  db,
+  configured,
+  requireAdmin,
+  passwordHash,
+  passwordMatches,
+  hash,
+  adminToken,
+  rateLimit,
+  asyncRoute,
+} from "./backend";
+import { deliverMessage, emailConfigured } from "./mail";
+import { settingsSchema } from "../shared/settings";
+import { renderPage } from "./seo";
 
-function passwordFingerprint(): string {
-  return crypto.createHash("sha256").update(getAdminPassword()).digest("hex").slice(0, 32);
+interface VisitRecord {
+  date: string;
+  count: number;
 }
-
-function createAdminToken(): string {
-  const payload = Buffer.from(JSON.stringify({ admin: true, exp: Date.now() + TOKEN_TTL_MS, pwd: passwordFingerprint() })).toString("base64url");
-  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("base64url");
-  return `${payload}.${sig}`;
+interface SupabaseVisitStats {
+  total: number;
+  today: number;
+  history: VisitRecord[];
+  generatedAt: string;
 }
-
-function verifyAdminToken(token: string): boolean {
-  try {
-    if (!token || !token.includes(".")) return false;
-    const dotIdx = token.lastIndexOf(".");
-    const payload = token.slice(0, dotIdx);
-    const sig = token.slice(dotIdx + 1);
-    const expectedSig = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("base64url");
-    // Constant-time comparison to prevent timing attacks
-    const aBuf = Buffer.from(sig.padEnd(expectedSig.length));
-    const bBuf = Buffer.from(expectedSig);
-    if (aBuf.length !== bBuf.length) return false;
-    if (!crypto.timingSafeEqual(aBuf, bBuf)) return false;
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return data.admin === true && typeof data.exp === "number" && Date.now() < data.exp && data.pwd === passwordFingerprint();
-  } catch {
-    return false;
-  }
+const readAnalyticsStats = () => db<SupabaseVisitStats>("analytics.stats");
+const getSupabaseAnalyticsConfig = () => configured();
+async function readCronDashboard() {
+  const runs = await db<any[]>("cron.list");
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(3, 0, 0, 0);
+  while (next <= now || ![1, 4].includes(next.getUTCDay()))
+    next.setUTCDate(next.getUTCDate() + 1);
+  return {
+    jobName: "supabase-keepalive",
+    schedule: "0 3 * * 1,4",
+    timezone: "UTC",
+    nextScheduledAt: next.toISOString(),
+    lastSuccessAt:
+      runs.find((r) => r.status === "success")?.completed_at || null,
+    totalRuns: runs.length,
+    successRuns: runs.filter((r) => r.status === "success").length,
+    failedRuns: runs.filter((r) => r.status === "failed").length,
+    latest: runs[0] || null,
+    runs,
+    generatedAt: now.toISOString(),
+  };
 }
-
-// ─── Rate limiting (per-instance; best-effort on serverless) ─────────────────
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-
-function checkLoginRateLimit(ip: string): { allowed: boolean } {
-  const now = Date.now();
-  const limit = loginAttempts.get(ip) ?? { count: 0, resetAt: now + 15 * 60 * 1000 };
-  if (now > limit.resetAt) { limit.count = 0; limit.resetAt = now + 15 * 60 * 1000; }
-  loginAttempts.set(ip, limit);
-  if (limit.count >= 5) return { allowed: false };
-  limit.count++;
-  return { allowed: true };
-}
-
-// ─── Admin password (server-side only) ───────────────────────────────────────
-let runtimeAdminPassword: string | null = null;
-
-function getAdminPassword(): string {
-  return (runtimeAdminPassword ?? process.env.ADMIN_PASSWORD ?? "").trim();
-}
-
-// ─── Require-admin middleware ─────────────────────────────────────────────────
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const token = (req.headers["x-admin-token"] as string) || "";
-  if (!verifyAdminToken(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-}
-
-// ─── Visitor stats ────────────────────────────────────────────────────────────
-interface VisitRecord { date: string; count: number }
-const visitHistory: VisitRecord[] = [];
-let totalVisits = 0;
-const STATS_PATH = path.join(os.tmpdir(), "aka-portfolio-stats.json");
-
-function loadPersistedStats() {
-  try {
-    const raw = fs.readFileSync(STATS_PATH, "utf-8");
-    const data = JSON.parse(raw);
-    if (typeof data.total === "number") totalVisits = data.total;
-    if (Array.isArray(data.history)) {
-      for (const item of data.history) {
-        if (item && typeof item.date === "string" && typeof item.count === "number") {
-          visitHistory.push(item);
-        }
-      }
-    }
-    console.log(`[stats] Loaded ${totalVisits} visits, ${visitHistory.length} days`);
-  } catch {
-    console.log("[stats] Starting fresh");
-  }
-}
-
-function savePersistedStats() {
-  try { fs.writeFileSync(STATS_PATH, JSON.stringify({ total: totalVisits, history: visitHistory }), "utf-8"); } catch { }
-}
-
-try { loadPersistedStats(); } catch { }
-
-function recordVisit() {
-  totalVisits++;
-  const today = new Date().toISOString().slice(0, 10);
-  const existing = visitHistory.find(v => v.date === today);
-  if (existing) { existing.count++; }
-  else { visitHistory.push({ date: today, count: 1 }); if (visitHistory.length > 30) visitHistory.shift(); }
-  savePersistedStats();
-}
-
-interface SupabaseVisitStats { total: number; today: number; history: VisitRecord[]; generatedAt: string }
-interface CronRunRecord { id: number; job_name: string; trigger_type: "scheduled" | "manual"; status: "running" | "success" | "failed"; started_at: string; completed_at: string | null; duration_ms: number | null; response: unknown; error_message: string | null; created_at: string }
-interface CronDashboard { jobName: string; schedule: string; timezone: string; nextScheduledAt: string; lastSuccessAt: string | null; totalRuns: number; successRuns: number; failedRuns: number; latest: CronRunRecord | null; runs: CronRunRecord[]; generatedAt: string }
-
-function getSupabaseAnalyticsConfig() {
-  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/\/$/, "");
-  const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
-  return url && key ? { url, key } : null;
-}
-
-async function callSupabaseAnalyticsRpc<T>(functionName: string, body: Record<string, unknown> = {}): Promise<T> {
-  const config = getSupabaseAnalyticsConfig();
-  if (!config) throw new Error("Supabase analytics is not configured");
-  const response = await fetch(`${config.url}/rest/v1/rpc/${functionName}`, {
-    method: "POST",
-    headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(`Supabase RPC ${functionName} failed (${response.status}): ${detail}`);
-  }
-  return await response.json() as T;
-}
-
-async function readAnalyticsStats(): Promise<SupabaseVisitStats> {
-  if (getSupabaseAnalyticsConfig()) return await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
-  const today = new Date().toISOString().slice(0, 10);
-  return { total: totalVisits, today: visitHistory.find(v => v.date === today)?.count || 0, history: visitHistory, generatedAt: new Date().toISOString() };
-}
-
-async function recordCronRun(input: { triggerType: "scheduled" | "manual"; status: "running" | "success" | "failed"; startedAt: string; completedAt?: string | null; durationMs?: number | null; response?: unknown; errorMessage?: string | null }) {
-  if (!getSupabaseAnalyticsConfig()) return null;
-  return await callSupabaseAnalyticsRpc<CronRunRecord>("record_portfolio_cron_run", {
-    p_job_name: "supabase-keepalive",
-    p_trigger_type: input.triggerType,
-    p_status: input.status,
-    p_started_at: input.startedAt,
-    p_completed_at: input.completedAt ?? null,
-    p_duration_ms: input.durationMs ?? null,
-    p_response: input.response ?? null,
-    p_error_message: input.errorMessage ?? null
-  });
-}
-
-async function readCronDashboard(): Promise<CronDashboard> {
-  if (!getSupabaseAnalyticsConfig()) throw new Error("Supabase cron storage is not configured");
-  return await callSupabaseAnalyticsRpc<CronDashboard>("get_portfolio_cron_dashboard", { p_limit: 50 });
-}
-
-// ─── Contact messages (in-memory; per-instance on Vercel) ────────────────────
-interface ContactMessage { id: string; name: string; email: string; message: string; timestamp: string; read: boolean; }
-const contactMessages: ContactMessage[] = [];
-
 // ─── Sanitize user input ──────────────────────────────────────────────────────
 function sanitize(str: string): string {
   return str
-    .replace(/[<>&"'`]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#x27;", "`": "&#x60;" })[c] || c)
+    .replace(
+      /[<>&"'`]/g,
+      (c) =>
+        ({
+          "<": "&lt;",
+          ">": "&gt;",
+          "&": "&amp;",
+          '"': "&quot;",
+          "'": "&#x27;",
+          "`": "&#x60;",
+        })[c] || c,
+    )
     .trim()
     .slice(0, 2000);
 }
 
 // ─── Language stats ───────────────────────────────────────────────────────────
 const LANG_COLORS: Record<string, string> = {
-  TypeScript: "#3178c6", TSX: "#61dafb", JavaScript: "#f7df1e",
-  CSS: "#2965f1", JSON: "#cbcb41", HTML: "#e34c26", Python: "#3572a5", Other: "#888"
+  TypeScript: "#3178c6",
+  TSX: "#61dafb",
+  JavaScript: "#f7df1e",
+  CSS: "#2965f1",
+  JSON: "#cbcb41",
+  HTML: "#e34c26",
+  Python: "#3572a5",
+  Other: "#888",
 };
 
 function analyzeLangStats() {
@@ -186,41 +96,78 @@ function analyzeLangStats() {
     try {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) { walkDir(full); continue; }
+        if (entry.isDirectory()) {
+          walkDir(full);
+          continue;
+        }
         const ext = path.extname(entry.name).toLowerCase();
-        const lang = ({ ".ts": "TypeScript", ".tsx": "TSX", ".js": "JavaScript", ".jsx": "JavaScript", ".css": "CSS", ".json": "JSON", ".html": "HTML" })[ext] || "Other";
-        try { const lines = fs.readFileSync(full, "utf-8").split("\n").length; stats[lang] = (stats[lang] || 0) + lines; totalLines += lines; } catch { }
+        const lang =
+          {
+            ".ts": "TypeScript",
+            ".tsx": "TSX",
+            ".js": "JavaScript",
+            ".jsx": "JavaScript",
+            ".css": "CSS",
+            ".json": "JSON",
+            ".html": "HTML",
+          }[ext] || "Other";
+        try {
+          const lines = fs.readFileSync(full, "utf-8").split("\n").length;
+          stats[lang] = (stats[lang] || 0) + lines;
+          totalLines += lines;
+        } catch {}
       }
-    } catch { }
+    } catch {}
   }
   try {
     walkDir(path.join(process.cwd(), "client/src"));
     walkDir(path.join(process.cwd(), "server"));
-  } catch { }
+  } catch {}
   if (totalLines === 0) return [];
-  return Object.entries(stats).filter(([, l]) => l > 0).sort((a, b) => b[1] - a[1]).slice(0, 8)
-    .map(([language, lines]) => ({ language, lines, percentage: Math.round((lines / totalLines) * 100), color: LANG_COLORS[language] || LANG_COLORS.Other }));
+  return Object.entries(stats)
+    .filter(([, l]) => l > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([language, lines]) => ({
+      language,
+      lines,
+      percentage: Math.round((lines / totalLines) * 100),
+      color: LANG_COLORS[language] || LANG_COLORS.Other,
+    }));
 }
 
 // ─── Translation ──────────────────────────────────────────────────────────────
 function fetchUrl(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? https : http;
-    const req = mod.get(url, { headers: { "User-Agent": "Mozilla/5.0" } }, res => {
-      let d = ""; res.on("data", c => d += c); res.on("end", () => resolve(d));
-    });
+    const req = mod.get(
+      url,
+      { headers: { "User-Agent": "Mozilla/5.0" } },
+      (res) => {
+        let d = "";
+        res.on("data", (c) => (d += c));
+        res.on("end", () => resolve(d));
+      },
+    );
     req.on("error", reject);
-    req.setTimeout(5000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.setTimeout(5000, () => {
+      req.destroy();
+      reject(new Error("timeout"));
+    });
   });
 }
 
-const translationCache = new Map<string, { value: string; expiresAt: number }>();
+const translationCache = new Map<
+  string,
+  { value: string; expiresAt: number }
+>();
 const TRANSLATION_CACHE_TTL = 15 * 60 * 1000;
 
 function cleanTranslation(value: unknown, source: string) {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/\s+/g, " ");
-  if (!normalized || normalized.toLowerCase() === source.trim().toLowerCase()) return null;
+  if (!normalized || normalized.toLowerCase() === source.trim().toLowerCase())
+    return null;
   return normalized.slice(0, 4000);
 }
 
@@ -230,22 +177,56 @@ async function translateIdToEn(text: string): Promise<string> {
   const cached = translationCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   const engines: Array<{ name: string; run: () => Promise<unknown> }> = [
-    { name: "google-http", run: async () => { const d = JSON.parse(await fetchUrl(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encodeURIComponent(source)}`)); return Array.isArray(d?.[0]) ? d[0].map((part: unknown[]) => part?.[0] || "").join(" ") : null; } },
-    { name: "google-translate-npm", run: async () => (await translateGoogle(source, { from: "id", to: "en" })).text },
-    { name: "mymemory-http", run: async () => { const d = JSON.parse(await fetchUrl(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(source)}&langpair=id|en`)); return d?.responseData?.translatedText; } }
+    {
+      name: "google-http",
+      run: async () => {
+        const d = JSON.parse(
+          await fetchUrl(
+            `https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encodeURIComponent(source)}`,
+          ),
+        );
+        return Array.isArray(d?.[0])
+          ? d[0].map((part: unknown[]) => part?.[0] || "").join(" ")
+          : null;
+      },
+    },
+    {
+      name: "google-translate-npm",
+      run: async () =>
+        (await translateGoogle(source, { from: "id", to: "en" })).text,
+    },
+    {
+      name: "mymemory-http",
+      run: async () => {
+        const d = JSON.parse(
+          await fetchUrl(
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(source)}&langpair=id|en`,
+          ),
+        );
+        return d?.responseData?.translatedText;
+      },
+    },
   ];
   const failures: string[] = [];
   for (const engine of engines) {
     try {
       const result = cleanTranslation(await engine.run(), source);
       if (result) {
-        translationCache.set(cacheKey, { value: result, expiresAt: Date.now() + TRANSLATION_CACHE_TTL });
-        if (translationCache.size > 200) translationCache.delete(translationCache.keys().next().value as string);
+        translationCache.set(cacheKey, {
+          value: result,
+          expiresAt: Date.now() + TRANSLATION_CACHE_TTL,
+        });
+        if (translationCache.size > 200)
+          translationCache.delete(
+            translationCache.keys().next().value as string,
+          );
         return result;
       }
       failures.push(`${engine.name}: empty`);
     } catch (error: any) {
-      failures.push(`${engine.name}: ${String(error?.message || "failed").slice(0, 120)}`);
+      failures.push(
+        `${engine.name}: ${String(error?.message || "failed").slice(0, 120)}`,
+      );
     }
   }
   throw new Error(`All translation engines failed: ${failures.join(" | ")}`);
@@ -253,7 +234,12 @@ async function translateIdToEn(text: string): Promise<string> {
 
 // ─── Email HTML template ──────────────────────────────────────────────────────
 function buildEmailHtml(name: string, email: string, message: string): string {
-  const date = new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const date = new Date().toLocaleDateString("id-ID", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#0f0f14;font-family:system-ui,sans-serif;">
 <table width="100%" style="background:#0f0f14;padding:32px 16px;"><tr><td align="center">
@@ -288,55 +274,112 @@ function buildEmailHtml(name: string, email: string, message: string): string {
 </body></html>`;
 }
 
+let cronRunning = false;
 async function executeSupabaseKeepAlive(triggerType: "scheduled" | "manual") {
-  const startedAt = new Date();
+  if (cronRunning) throw new Error("Cron already running");
+  cronRunning = true;
+  const start = new Date();
   try {
-    const stats = await callSupabaseAnalyticsRpc<SupabaseVisitStats>("get_portfolio_visit_stats");
-    const completedAt = new Date();
-    const response = { ok: true, storage: "supabase", total: stats.total, today: stats.today, generatedAt: stats.generatedAt };
-    await recordCronRun({ triggerType, status: "success", startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), durationMs: completedAt.getTime() - startedAt.getTime(), response });
-    return response;
-  } catch (error: any) {
-    const completedAt = new Date();
-    const errorMessage = String(error?.message || "Supabase keep-alive failed").slice(0, 2000);
-    try {
-      await recordCronRun({ triggerType, status: "failed", startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), durationMs: completedAt.getTime() - startedAt.getTime(), errorMessage });
-    } catch (recordError) {
-      console.error("[cron] Failed to record failed run:", recordError);
+    const stats = await readAnalyticsStats();
+    for (let i = 0; i < 5; i++) {
+      const delivered = await deliverMessage();
+      if (delivered.empty || delivered.configured === false) break;
     }
-    throw new Error(errorMessage);
+    const result = {
+      ok: true,
+      storage: "supabase",
+      total: stats.total,
+      today: stats.today,
+    };
+    await db("cron.record", {
+      triggerType,
+      status: "success",
+      startedAt: start.toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: Date.now() - start.getTime(),
+      response: result,
+    });
+    return result;
+  } catch (error) {
+    await db("cron.record", {
+      triggerType,
+      status: "failed",
+      startedAt: start.toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: Date.now() - start.getTime(),
+      errorMessage: "Keepalive failed",
+    }).catch(() => {});
+    throw error;
+  } finally {
+    cronRunning = false;
   }
 }
-
 // ─── Register routes ──────────────────────────────────────────────────────────
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express,
+): Promise<Server> {
   // Security headers
   app.use((_req, res, next) => {
     res.removeHeader("X-Powered-By");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    res.setHeader(
+      "Permissions-Policy",
+      "camera=(), microphone=(), geolocation=()",
+    );
     next();
   });
 
-  // ── Analytics ───────────────────────────────────────────────────────────────
-  app.post("/api/analytics/visit", async (_req, res) => {
-    try {
-      if (getSupabaseAnalyticsConfig()) {
-        await callSupabaseAnalyticsRpc<{ ok: boolean }>("record_portfolio_visit");
-        return res.json({ ok: true, storage: "supabase" });
-      }
-      recordVisit();
-      return res.json({ ok: true, storage: "temporary-instance-file" });
-    } catch (error) {
-      console.error("[analytics/visit] Storage error:", error);
-      return res.status(502).json({ ok: false, error: "Analytics storage unavailable" });
-    }
-  });
-
+  app.get(
+    "/api/settings",
+    asyncRoute(async (_req, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await db("settings.get"));
+    }),
+  );
+  app.get(
+    "/api/admin/settings/history",
+    requireAdmin,
+    asyncRoute(async (_req, res) => res.json(await db("settings.history"))),
+  );
+  app.put(
+    "/api/admin/settings",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const parsed = settingsSchema.safeParse(req.body.settings);
+      if (!parsed.success || !Number.isInteger(req.body.version))
+        return res
+          .status(400)
+          .json({
+            error: "Pengaturan tidak valid. Periksa URL dan isi kolom.",
+          });
+      res.json(
+        await db("settings.save", {
+          settings: parsed.data,
+          version: req.body.version,
+        }),
+      );
+    }),
+  );
+  app.get(
+    "/",
+    asyncRoute(async (_req, res) => {
+      res.type("html").setHeader("Cache-Control", "no-store");
+      res.send(await renderPage());
+    }),
+  );
+  app.post(
+    "/api/analytics/visit",
+    asyncRoute(async (req, res) => {
+      if (!(await rateLimit(req, "visit", 30, 3600)))
+        return res.status(429).json({ error: "Too many visits" });
+      await db("analytics.visit");
+      res.json({ ok: true, storage: "supabase" });
+    }),
+  );
   app.get("/api/analytics/stats", async (_req, res) => {
     try {
       return res.json(await readAnalyticsStats());
@@ -349,13 +392,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/cron/supabase-keepalive", async (req, res) => {
     const cronSecret = (process.env.CRON_SECRET || "").trim();
     const authorization = req.headers.authorization || "";
-    if (!cronSecret || authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ ok: false, error: "Unauthorized" });
-    if (!getSupabaseAnalyticsConfig()) return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
+    if (!cronSecret || authorization !== `Bearer ${cronSecret}`)
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!getSupabaseAnalyticsConfig())
+      return res
+        .status(503)
+        .json({ ok: false, error: "Supabase analytics is not configured" });
     try {
       return res.json(await executeSupabaseKeepAlive("scheduled"));
     } catch (error: any) {
       console.error("[cron/supabase-keepalive] Storage error:", error);
-      return res.status(502).json({ ok: false, error: "Supabase keep-alive failed" });
+      return res
+        .status(502)
+        .json({ ok: false, error: "Supabase keep-alive failed" });
     }
   });
 
@@ -364,120 +413,173 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.json(await readCronDashboard());
     } catch (error: any) {
       console.error("[admin/cron/status] Storage error:", error);
-      return res.status(502).json({ ok: false, error: "Cron dashboard unavailable" });
+      return res
+        .status(502)
+        .json({ ok: false, error: "Cron dashboard unavailable" });
     }
   });
 
   app.post("/api/admin/cron/run", requireAdmin, async (_req, res) => {
-    if (!getSupabaseAnalyticsConfig()) return res.status(503).json({ ok: false, error: "Supabase analytics is not configured" });
+    if (!getSupabaseAnalyticsConfig())
+      return res
+        .status(503)
+        .json({ ok: false, error: "Supabase analytics is not configured" });
     try {
       return res.json(await executeSupabaseKeepAlive("manual"));
     } catch (error: any) {
       console.error("[admin/cron/run] Storage error:", error);
-      return res.status(502).json({ ok: false, error: "Supabase keep-alive failed" });
+      return res
+        .status(502)
+        .json({ ok: false, error: "Supabase keep-alive failed" });
     }
   });
 
   app.get("/api/analytics/lang-stats", (_req, res) => {
-    try { res.json(analyzeLangStats()); } catch { res.json([]); }
+    try {
+      res.json(analyzeLangStats());
+    } catch {
+      res.json([]);
+    }
   });
 
-  // ── Admin auth (stateless HMAC — works across Vercel instances) ─────────────
-  app.post("/api/admin/login", (req, res) => {
-    try {
-      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
-      const { allowed } = checkLoginRateLimit(ip);
-      if (!allowed) {
-        return res.status(429).json({ error: "Terlalu banyak percobaan. Coba lagi dalam 15 menit." });
-      }
-      const { password } = req.body || {};
-      if (!password || typeof password !== "string") {
+  app.post(
+    "/api/admin/login",
+    asyncRoute(async (req, res) => {
+      if (!(await rateLimit(req, "login", 5, 900)))
+        return res
+          .status(429)
+          .json({
+            error: "Terlalu banyak percobaan. Coba lagi dalam 15 menit.",
+          });
+      const password = req.body?.password;
+      if (
+        typeof password !== "string" ||
+        password.length > 256 ||
+        !password.trim()
+      )
         return res.status(400).json({ error: "Password diperlukan" });
+      let auth = await db("auth.get");
+      if (!auth.hash) {
+        if (!process.env.ADMIN_PASSWORD)
+          return res.status(503).json({ error: "Admin belum dikonfigurasi" });
+        await db("auth.seed", {
+          hash: await passwordHash(process.env.ADMIN_PASSWORD.trim()),
+        });
+        auth = await db("auth.get");
       }
-      if (password.trim() !== getAdminPassword()) {
+      if (!(await passwordMatches(password.trim(), auth.hash)))
         return res.status(401).json({ error: "Password salah" });
-      }
-      const token = createAdminToken();
-      console.log(`[admin] Login successful from ${ip}`);
+      const token = crypto.randomBytes(32).toString("hex");
+      await db("session.create", { hash: hash(token) });
       res.json({ ok: true, token });
-    } catch (err) {
-      console.error("[admin/login] Error:", err);
-      res.status(500).json({ error: "Server error" });
-    }
-  });
-
-  app.post("/api/admin/logout", (_req, res) => {
-    // Stateless tokens: client just deletes the token. Nothing to do server-side.
-    res.json({ ok: true });
-  });
-
-  app.get("/api/admin/check", (req, res) => {
-    const token = (req.headers["x-admin-token"] as string) || "";
-    if (!verifyAdminToken(token)) return res.status(401).json({ error: "Unauthorized" });
-    res.json({ ok: true });
-  });
-
-  app.get("/api/admin/health", requireAdmin, async (_req, res) => {
-    const supabaseConfigured = Boolean(getSupabaseAnalyticsConfig());
-    let stats: SupabaseVisitStats | null = null;
-    if (supabaseConfigured) {
-      try { stats = await readAnalyticsStats(); } catch { }
-    }
-    res.json({
-      ok: true,
-      generatedAt: new Date().toISOString(),
-      uptimeSeconds: Math.round(process.uptime()),
-      adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
-      emailConfigured: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-      statsStorage: supabaseConfigured && stats ? "supabase-postgres" : "temporary-instance-file",
-      messagesStorage: "memory-instance",
-      lastVisitDate: stats?.history?.length ? stats.history[stats.history.length - 1].date : visitHistory.length ? visitHistory[visitHistory.length - 1].date : null
-    });
-  });
-
-  app.post("/api/admin/change-password", requireAdmin, (req, res) => {
-    try {
-      const { newPassword } = req.body || {};
-      if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length < 10) {
-        return res.status(400).json({ error: "Password minimal 10 karakter" });
-      }
-      runtimeAdminPassword = newPassword.trim();
-      console.log("[admin] Password changed at runtime");
-      // Old tokens are still valid (stateless) — but they'll be rejected after 24h naturally
-      // For immediate invalidation, user just logs out manually on other devices
+    }),
+  );
+  app.post(
+    "/api/admin/logout",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      await db("session.revoke", { hash: hash(adminToken(req)) });
       res.json({ ok: true });
-    } catch (err) {
-      console.error("[admin/change-password] Error:", err);
-      res.status(500).json({ error: "Server error" });
-    }
-  });
-
+    }),
+  );
+  app.get("/api/admin/check", requireAdmin, (_req, res) =>
+    res.json({ ok: true }),
+  );
+  app.get(
+    "/api/admin/health",
+    requireAdmin,
+    asyncRoute(async (_req, res) => {
+      const stats = await readAnalyticsStats();
+      res.json({
+        ok: true,
+        generatedAt: new Date().toISOString(),
+        uptimeSeconds: Math.round(process.uptime()),
+        adminPasswordConfigured: true,
+        emailConfigured: emailConfigured(),
+        statsStorage: "supabase-postgres",
+        messagesStorage: "supabase-postgres",
+        settingsStorage: "supabase-postgres",
+        lastVisitDate: stats.history.at(-1)?.date || null,
+      });
+    }),
+  );
+  app.post(
+    "/api/admin/change-password",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const password = req.body?.newPassword;
+      if (
+        typeof password !== "string" ||
+        password.trim().length < 12 ||
+        password.length > 256
+      )
+        return res
+          .status(400)
+          .json({ error: "Password harus 12–256 karakter" });
+      await db("auth.password", { hash: await passwordHash(password.trim()) });
+      res.json({ ok: true, requiresLogin: true });
+    }),
+  );
+  app.post(
+    "/api/admin/email/verify",
+    requireAdmin,
+    asyncRoute(async (_req, res) => {
+      if (!emailConfigured())
+        return res
+          .status(503)
+          .json({ ok: false, error: "Email belum dikonfigurasi" });
+      const transport = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+        connectionTimeout: 8000,
+        socketTimeout: 10000,
+        tls: { rejectUnauthorized: true },
+      });
+      try {
+        await transport.verify();
+        res.json({ ok: true });
+      } finally {
+        transport.close();
+      }
+    }),
+  );
   // ── Test email (admin only) ──────────────────────────────────────────────────
   app.post("/api/admin/test-email", requireAdmin, async (req, res) => {
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASS;
     const emailTo = process.env.EMAIL_RECIPIENT || emailUser;
     if (!emailUser || !emailPass) {
-      return res.json({ ok: false, error: "EMAIL_USER / EMAIL_PASS belum diset di environment variables" });
+      return res.json({
+        ok: false,
+        error: "EMAIL_USER / EMAIL_PASS belum diset di environment variables",
+      });
     }
     try {
       const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com", port: 465, secure: true,
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: { user: emailUser, pass: emailPass },
-        connectionTimeout: 8000, socketTimeout: 8000,
-        tls: { rejectUnauthorized: false }
+        connectionTimeout: 8000,
+        socketTimeout: 8000,
+        tls: { rejectUnauthorized: true },
       });
       await Promise.race([
         transporter.sendMail({
-          from: `"Portfolio aka" <${emailUser}>`, to: emailTo,
+          from: `"Portfolio aka" <${emailUser}>`,
+          to: emailTo,
           subject: "✅ Test Email — Admin Dashboard Portfolio aka",
           html: `<div style="font-family:system-ui;padding:24px;background:#0f0f14;color:#fff;border-radius:12px;max-width:400px">
             <h2 style="margin:0 0 8px;color:#3b82f6">✅ Email Berhasil!</h2>
             <p style="margin:0;color:rgba(255,255,255,0.7)">Konfigurasi email Anda berjalan dengan baik.</p>
             <p style="margin:12px 0 0;font-size:12px;color:rgba(255,255,255,0.4)">Dikirim dari Admin Dashboard · ${new Date().toLocaleString("id-ID")}</p>
-          </div>`
+          </div>`,
         }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 9000))
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 9000),
+        ),
       ]);
       console.log(`[admin] Test email sent to ${emailTo}`);
       res.json({ ok: true, to: emailTo });
@@ -489,120 +591,80 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── Translate ───────────────────────────────────────────────────────────────
-  app.post("/api/translate", async (req, res) => {
+  app.post("/api/translate", requireAdmin, async (req, res) => {
     try {
       const { text } = req.body || {};
-      if (!text || typeof text !== "string") return res.status(400).json({ error: "text required" });
+      if (!text || typeof text !== "string")
+        return res.status(400).json({ error: "text required" });
       const trimmed = text.trim().slice(0, 2000);
       if (!trimmed) return res.status(400).json({ error: "empty text" });
       const translated = await translateIdToEn(trimmed);
       res.json({ ok: true, result: translated });
     } catch (err: any) {
-      res.status(500).json({ error: "Translation failed", message: err?.message });
+      res
+        .status(500)
+        .json({ error: "Translation failed", message: err?.message });
     }
   });
 
-  // ── Contact form ─────────────────────────────────────────────────────────────
-  app.post("/api/contact", async (req, res) => {
-    // Always return 200 — never let the server crash on this endpoint
-    try {
+  app.post(
+    "/api/contact",
+    asyncRoute(async (req, res) => {
       const body = req.body || {};
-      const rawName = String(body.name || "").trim();
-      const rawEmail = String(body.email || "").trim();
-      const rawMessage = String(body.message || "").trim();
-
-      if (!rawName || !rawEmail || !rawMessage) {
-        return res.status(400).json({ error: "Semua field wajib diisi" });
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
-        return res.status(400).json({ error: "Format email tidak valid" });
-      }
-      if (rawMessage.length < 5) {
-        return res.status(400).json({ error: "Pesan terlalu pendek" });
-      }
-
-      const name = sanitize(rawName);
-      const email = sanitize(rawEmail);
-      const message = sanitize(rawMessage);
-
-      // Store message in memory
-      try {
-        contactMessages.unshift({
-          id: Date.now().toString(),
-          name, email, message,
-          timestamp: new Date().toISOString(),
-          read: false
+      if (body.website) return res.json({ ok: true });
+      if (!(await rateLimit(req, "contact", 5, 3600)))
+        return res
+          .status(429)
+          .json({ error: "Terlalu banyak pesan. Coba lagi nanti." });
+      const { name, email, message } = body;
+      if (
+        typeof name !== "string" ||
+        typeof email !== "string" ||
+        typeof message !== "string" ||
+        !name.trim() ||
+        name.trim().length > 100 ||
+        email.length > 254 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        /[\r\n]/.test(name + email) ||
+        message.trim().length < 5 ||
+        message.trim().length > 1000
+      )
+        return res
+          .status(400)
+          .json({ error: "Nama, email, atau pesan tidak valid." });
+      const stored = await db("contact.insert", {
+        name: name.trim(),
+        email: email.trim(),
+        message: message.trim(),
+      });
+      const delivery = await deliverMessage(stored.id);
+      res
+        .status(201)
+        .json({
+          ok: true,
+          id: stored.id,
+          emailStatus: delivery.sent ? "sent" : "pending",
         });
-        if (contactMessages.length > 100) contactMessages.splice(100);
-      } catch (storeErr) {
-        console.error("[contact] Failed to store message:", storeErr);
-      }
-
-      // Return success immediately
-      res.json({ ok: true });
-
-      // Send email in background (fire-and-forget, non-blocking)
-      const emailUser = process.env.EMAIL_USER;
-      const emailPass = process.env.EMAIL_PASS;
-      const emailTo = process.env.EMAIL_RECIPIENT || emailUser;
-
-      if (emailUser && emailPass && emailTo) {
-        setTimeout(async () => {
-          try {
-            const transporter = nodemailer.createTransport({
-              host: "smtp.gmail.com",
-              port: 465,
-              secure: true,
-              auth: { user: emailUser, pass: emailPass },
-              connectionTimeout: 8000,
-              socketTimeout: 8000,
-              tls: { rejectUnauthorized: false }
-            });
-            await Promise.race([
-              transporter.sendMail({
-                from: `"Portfolio aka" <${emailUser}>`,
-                to: emailTo,
-                replyTo: rawEmail,
-                subject: `📩 Pesan dari ${name} — Portfolio aka`,
-                html: buildEmailHtml(name, rawEmail, message)
-              }),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("email-timeout")), 8500))
-            ]);
-            console.log(`[contact] Email sent OK → ${emailTo}`);
-          } catch (emailErr: any) {
-            console.error("[contact] Email failed:", emailErr?.message || emailErr);
-          }
-        }, 10);
-      }
-    } catch (err) {
-      console.error("[contact] Unexpected error:", err);
-      // Even if something goes wrong, try to return 200
-      if (!res.headersSent) {
-        try { res.json({ ok: true }); } catch { }
-      }
-    }
-  });
-
-  // ── Messages (protected) ─────────────────────────────────────────────────────
-  app.get("/api/messages", requireAdmin, (_req, res) => {
-    try { res.json(contactMessages); } catch { res.json([]); }
-  });
-
-  app.patch("/api/messages/:id/read", requireAdmin, (req, res) => {
-    try {
-      const msg = contactMessages.find(m => m.id === req.params.id);
-      if (msg) msg.read = true;
-    } catch { }
-    res.json({ ok: true });
-  });
-
-  app.delete("/api/messages/:id", requireAdmin, (req, res) => {
-    try {
-      const idx = contactMessages.findIndex(m => m.id === req.params.id);
-      if (idx !== -1) contactMessages.splice(idx, 1);
-    } catch { }
-    res.json({ ok: true });
-  });
-
+    }),
+  );
+  app.get(
+    "/api/messages",
+    requireAdmin,
+    asyncRoute(async (_req, res) => res.json(await db("contact.list"))),
+  );
+  app.patch(
+    "/api/messages/:id/read",
+    requireAdmin,
+    asyncRoute(async (req, res) =>
+      res.json(await db("contact.read", { id: req.params.id })),
+    ),
+  );
+  app.delete(
+    "/api/messages/:id",
+    requireAdmin,
+    asyncRoute(async (req, res) =>
+      res.json(await db("contact.delete", { id: req.params.id })),
+    ),
+  );
   return httpServer;
 }

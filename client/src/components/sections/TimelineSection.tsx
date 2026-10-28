@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 import { SchoolLogo } from "@/components/SchoolLogo";
@@ -14,6 +14,7 @@ interface PopupInfo {
 
 export default function TimelineSection() {
   const { t } = useLang();
+  const reducedMotion=useReducedMotion();
   const { settings } = usePortfolio();
   const tl = settings.timeline;
   const [popup, setPopup] = useState<PopupInfo | null>(null);
@@ -44,9 +45,10 @@ export default function TimelineSection() {
   }, []);
 
   useEffect(() => {
+    if(reducedMotion)return;
     startAutoScroll();
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [startAutoScroll]);
+  }, [startAutoScroll,reducedMotion]);
 
   const pause = () => {
     isPausedRef.current = true;
@@ -113,7 +115,7 @@ export default function TimelineSection() {
                     <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center mx-auto mb-2.5`}>
                       <SchoolLogo level={item.level} alt={`${item.label}: ${item.name}`} className="w-11 h-11 rounded-xl bg-white/95 p-1" />
                     </div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-1">{item.label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">{item.label}</p>
                     <p className="text-xs font-semibold text-card-foreground leading-snug">{item.name}</p>
                   </motion.button>
                   <div className="mt-2.5 w-0.5 h-3 bg-border/50 rounded" />

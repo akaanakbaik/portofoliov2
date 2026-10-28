@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  ReactNode,
+} from "react";
 import { PORTFOLIO_CONFIG } from "./config";
 
 export interface PlaylistItem {
@@ -57,20 +64,26 @@ export interface PortfolioSettings {
     sma: TimelineEntry;
   };
   footerText: string;
-  seo: { title: string; description: string; keywords: string; ogImage: string; canonical: string };
+  seo: {
+    title: string;
+    description: string;
+    keywords: string;
+    ogImage: string;
+    canonical: string;
+  };
   motion: { parallaxEnabled: boolean; parallaxIntensity: number };
 }
 
 interface PortfolioContextType {
   settings: PortfolioSettings;
-  updateSettings: (partial: Partial<PortfolioSettings>) => void;
-  resetSettings: () => void;
+  updateSettings: (partial: Partial<PortfolioSettings>) => Promise<void>;
+  resetSettings: () => Promise<void>;
 }
 
-const defaultSettings: PortfolioSettings = {
+export const defaultSettings: PortfolioSettings = {
   name: PORTFOLIO_CONFIG.name,
   photoUrl: PORTFOLIO_CONFIG.photoUrl,
-  faviconUrl: "https://raw.githubusercontent.com/akaanakbaik/my-cdn/main/portofolio/aka.jpg",
+  faviconUrl: "/favicon.svg",
   birthDate: PORTFOLIO_CONFIG.birthDate,
   origin: PORTFOLIO_CONFIG.origin,
   school: PORTFOLIO_CONFIG.school,
@@ -88,70 +101,104 @@ const defaultSettings: PortfolioSettings = {
     projects: true,
     friends: true,
     social: true,
-    contact: true
+    contact: true,
   },
   timeline: {
     sd: { name: "SDN 13 Lembah Melintang", year: "2016 - 2022" },
     mts: { name: "MTsN 2 Pasaman Barat", year: "2022 - 2025" },
-    sma: { name: "SMAN 1 Lembah Melintang", year: "2025 - Sekarang" }
+    sma: { name: "SMAN 1 Lembah Melintang", year: "2025 - Sekarang" },
   },
   footerText: "© 2026 Aka",
   seo: {
-    title: "aka — Portfolio",
-    description: "Portfolio Aka, pelajar & developer dari Sumatera Barat Indonesia",
-    keywords: "aka, akaanakbaik, portfolio, developer, pelajar, Sumatera Barat, Indonesia, web developer, programming",
-    ogImage: PORTFOLIO_CONFIG.photoUrl,
-    canonical: "https://akaa.dev/"
+    title: "aka (bg aka) — Abdul Khaliq Arrasyid | Portfolio",
+    description:
+      "Portfolio resmi Abdul Khaliq Arrasyid, dikenal sebagai aka atau bg aka. Pelajar SMAN 1 Lembah Melintang, web developer, dan kegiatan PMR di Sumatera Barat.",
+    keywords:
+      "aka, bg aka, aka SMAN, aka SMAN 1 Lembah Melintang, Abdul Khaliq Arrasyid, aka PMR, akaanakbaik",
+    ogImage: "https://akaa.dev/og-image.jpg",
+    canonical: "https://akaa.dev/",
   },
   motion: {
     parallaxEnabled: true,
-    parallaxIntensity: 0.35
-  }
+    parallaxIntensity: 0.35,
+  },
 };
 
 const PortfolioContext = createContext<PortfolioContextType>({
   settings: defaultSettings,
-  updateSettings: () => {},
-  resetSettings: () => {}
+  updateSettings: async () => {},
+  resetSettings: async () => {},
 });
 
-export function PortfolioProvider({ children }: { children: ReactNode }) {
+export function PortfolioProvider({
+  children,
+  initialSettings,
+}: {
+  children: ReactNode;
+  initialSettings?: PortfolioSettings;
+}) {
   const [settings, setSettings] = useState<PortfolioSettings>(() => {
-    try {
-      const saved = localStorage.getItem("aka-portfolio-settings");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...defaultSettings,
-          ...parsed,
-          sectionVisibility: { ...defaultSettings.sectionVisibility, ...(parsed.sectionVisibility || {}) },
-          timeline: { ...defaultSettings.timeline, ...(parsed.timeline || {}) },
-          seo: { ...defaultSettings.seo, ...(parsed.seo || {}) },
-          motion: { ...defaultSettings.motion, ...(parsed.motion || {}) }
-        };
-      }
-    } catch {}
-    return defaultSettings;
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname === "/preview"
+    ) {
+      try {
+        const draft = sessionStorage.getItem("aka-preview");
+        if (draft) return JSON.parse(draft);
+      } catch {}
+    }
+    return initialSettings || defaultSettings;
   });
-
-  const updateSettings = (partial: Partial<PortfolioSettings>) => {
-    setSettings(prev => {
-      const next = { ...prev, ...partial };
-      localStorage.setItem("aka-portfolio-settings", JSON.stringify(next));
-      return next;
+  const version = useRef(0);
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (window.location.pathname === "/preview") return;
+    let alive = true;
+    fetch("/api/settings", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Cannot load settings");
+        return r.json();
+      })
+      .then((data) => {
+        if (!alive) return;
+        version.current = data.version;
+        loaded.current = true;
+        if (data.settings)
+          setSettings({ ...defaultSettings, ...data.settings });
+      })
+      .catch(() => {
+        loaded.current = false;
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const updateSettings = async (partial: Partial<PortfolioSettings>) => {
+    if (!loaded.current)
+      throw new Error(
+        "Pengaturan belum dimuat. Muat ulang halaman sebelum menyimpan.",
+      );
+    const next = { ...settings, ...partial };
+    const r = await fetch("/api/admin/settings", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": sessionStorage.getItem("aka-admin-token") || "",
+      },
+      body: JSON.stringify({ settings: next, version: version.current }),
     });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Gagal menyimpan pengaturan");
+    version.current = data.version;
+    setSettings(next);
   };
-
-  const resetSettings = () => {
-    localStorage.removeItem("aka-portfolio-settings");
-    setSettings(defaultSettings);
-  };
-
+  const resetSettings = () => updateSettings(defaultSettings);
   return (
-    <PortfolioContext.Provider value={{ settings, updateSettings, resetSettings }}>
+    <PortfolioContext.Provider
+      value={{ settings, updateSettings, resetSettings }}
+    >
       {children}
     </PortfolioContext.Provider>
   );
 }
-
 export const usePortfolio = () => useContext(PortfolioContext);

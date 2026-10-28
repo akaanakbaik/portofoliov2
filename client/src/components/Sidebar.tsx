@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { SvgIcon, type SvgIconName } from "@/components/SvgIcon";
@@ -21,6 +22,20 @@ const navItems: { key: string; icon: SvgIconName }[] = [
 
 export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps) {
   const { t } = useLang();
+  const panel=useRef<HTMLElement>(null);
+  useEffect(()=>{
+    if(!isOpen)return;
+    const previous=document.activeElement as HTMLElement;
+    const overflow=document.body.style.overflow;document.body.style.overflow='hidden';
+    const focusables=()=>Array.from(panel.current?.querySelectorAll<HTMLElement>('button,a[href],[tabindex="0"]')||[]);
+    focusables()[0]?.focus();
+    const handler=(e:KeyboardEvent)=>{
+      if(e.key==='Escape'){e.preventDefault();onClose();}
+      if(e.key==='Tab'){const list=focusables();const first=list[0],last=list.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
+    };
+    document.addEventListener('keydown',handler);
+    return ()=>{document.removeEventListener('keydown',handler);document.body.style.overflow=overflow;previous?.focus();};
+  },[isOpen,onClose]);
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -42,6 +57,11 @@ export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps
             onClick={onClose}
           />
           <motion.aside
+            ref={panel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigasi"
+            id="navigation-panel"
             key="sidebar"
             initial={{ x: -280, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -54,6 +74,7 @@ export default function Sidebar({ isOpen, onClose, activeSection }: SidebarProps
             }}
           >
             <div className="px-5 pt-5 pb-4 border-b border-sidebar-border/60">
+              <button type="button" onClick={onClose} aria-label="Tutup navigasi" className="float-right min-h-11 min-w-11 rounded-lg focus-visible:ring-2">×</button>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Navigation</p>
               <p className="text-sm font-bold text-sidebar-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Portfolio</p>
             </div>
