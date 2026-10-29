@@ -64,7 +64,7 @@ export default function AboutSection() {
           <h3 className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "hsl(217 91% 60%)" }}>
             {t.about.descTitle}
           </h3>
-          <p className="mb-3 text-sm leading-relaxed text-card-foreground">{lang === "id" ? "Saya Abdul Khaliq Arrasyid, dikenal sebagai aka atau pelajar SMAN 1 Lembah Melintang di Sumatera Barat. Di sini saya berbagi proyek web, perjalanan belajar, dan kegiatan PMR." : "I am Abdul Khaliq Arrasyid, also known as aka or a student at SMAN 1 Lembah Melintang in West Sumatra. Here I share web projects, my learning journey, and youth Red Cross (PMR) activities."}</p>
+          <p className="mb-3 text-sm leading-relaxed text-card-foreground">{lang === "id" ? "Saya Abdul Khaliq Arrasyid, dikenal sebagai aka, pelajar SMAN 1 Lembah Melintang di Sumatera Barat. Di sini saya berbagi proyek web, perjalanan belajar, dan kegiatan PMR." : "I am Abdul Khaliq Arrasyid, also known as aka, a student at SMAN 1 Lembah Melintang in West Sumatra. Here I share web projects, my learning journey, and youth Red Cross (PMR) activities."}</p>
           <p className="text-sm leading-relaxed text-card-foreground/75" data-testid="about-desc">
             {lang === "id" ? settings.aboutDesc.id : settings.aboutDesc.en}
           </p>
