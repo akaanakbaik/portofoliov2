@@ -58,6 +58,7 @@ export async function renderPage() {
     "og:title": settings.seo.title,
     "og:description": settings.seo.description,
     "og:image": settings.seo.ogImage,
+    "og:image:secure_url": settings.seo.ogImage,
     "twitter:title": settings.seo.title,
     "twitter:description": settings.seo.description,
     "twitter:image": settings.seo.ogImage,
