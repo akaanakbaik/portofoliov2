@@ -110,12 +110,12 @@ export const defaultSettings: PortfolioSettings = {
   },
   footerText: "© 2026 Aka",
   seo: {
-    title: "aka (bg aka) — Abdul Khaliq Arrasyid | Portfolio",
+    title: "aka — Abdul Khaliq Arrasyid | Portfolio",
     description:
-      "Portfolio resmi Abdul Khaliq Arrasyid, dikenal sebagai aka atau bg aka. Pelajar SMAN 1 Lembah Melintang, web developer, dan kegiatan PMR di Sumatera Barat.",
+      "Kenali aka — Abdul Khaliq Arrasyid. Jelajahi proyek web, perjalanan belajar, dan kegiatan PMR dari pelajar SMAN 1 Lembah Melintang, Sumatera Barat.",
     keywords:
       "aka, bg aka, aka SMAN, aka SMAN 1 Lembah Melintang, Abdul Khaliq Arrasyid, aka PMR, akaanakbaik",
-    ogImage: "https://akaa.dev/og-image.jpg",
+    ogImage: "https://akaa.dev/og-preview-v2.png",
     canonical: "https://akaa.dev/",
   },
   motion: {
