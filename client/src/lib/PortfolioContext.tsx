@@ -114,7 +114,7 @@ export const defaultSettings: PortfolioSettings = {
     description:
       "Kenali aka — Abdul Khaliq Arrasyid. Jelajahi proyek web, perjalanan belajar, dan kegiatan PMR dari pelajar SMAN 1 Lembah Melintang, Sumatera Barat.",
     keywords:
-      "aka, bg aka, aka SMAN, aka SMAN 1 Lembah Melintang, Abdul Khaliq Arrasyid, aka PMR, akaanakbaik",
+      "aka, aka SMAN, aka SMAN 1 Lembah Melintang, Abdul Khaliq Arrasyid, aka PMR, akaanakbaik",
     ogImage: "https://akaa.dev/aka-social-v3.jpg",
     canonical: "https://akaa.dev/",
   },

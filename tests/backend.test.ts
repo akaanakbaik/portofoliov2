@@ -314,13 +314,13 @@ test("server HTML includes visible identity, projects, canonical and valid schem
   assert.equal(r.status, 200, html);
   for (const text of [
     "Abdul Khaliq Arrasyid",
-    "bg aka",
     "SMAN 1 Lembah Melintang",
     "PMR",
     "Proyek Saya",
     "https://akaa.dev/",
   ])
     assert.ok(html.includes(text), text);
+  assert.ok(!html.toLowerCase().includes("bg aka"));
   const schema = html.match(
     /<script type="application\/ld\+json">([\s\S]*?)<\/script>/,
   );
