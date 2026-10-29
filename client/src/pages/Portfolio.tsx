@@ -57,10 +57,13 @@ export default function Portfolio() {
   useEffect(() => {
     const url = settings.faviconUrl;
     if (!url) return;
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-    if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
+    let link = document.querySelector<HTMLLinkElement>("#portfolio-favicon");
+    if (!link) { link = document.createElement("link"); link.rel = "icon"; link.id = "portfolio-favicon"; document.head.appendChild(link); }
     link.href = url;
-    link.type = url.endsWith(".svg") ? "image/svg+xml" : url.endsWith(".ico") ? "image/x-icon" : "image/jpeg";
+    const path = new URL(url, window.location.origin).pathname.toLowerCase();
+    link.type = path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".ico") ? "image/x-icon" : path.endsWith(".png") ? "image/png" : "image/jpeg";
+    if (path === "/aka-icon-192.png") link.sizes.value = "192x192";
+    else link.removeAttribute("sizes");
   }, [settings.faviconUrl]);
 
   useEffect(() => {

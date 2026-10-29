@@ -110,7 +110,7 @@ export default function HomeSection() {
           transition={{ delay: 0.42, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="max-w-xl mx-auto text-base md:text-lg leading-relaxed text-muted-foreground"
         >
-          {lang === "id" ? "Membangun, belajar, dan bereksperimen lewat web." : "Building, learning, and experimenting on the web."}
+          {lang === "id" ? "akaa.dev — portofolio aka. Membangun, belajar, dan bereksperimen lewat web." : "akaa.dev — aka’s portfolio. Building, learning, and experimenting on the web."}
         </motion.p>
 
         <motion.div
