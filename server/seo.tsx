@@ -12,6 +12,7 @@ import { LangProvider } from "../client/src/lib/LangContext";
 import { ThemeProvider } from "../client/src/lib/ThemeContext";
 import { db } from "./backend";
 import { shell } from "./generated-shell";
+import { imageMetadata } from "../shared/seo";
 const escape = (s: string) =>
   s.replace(
     /[&<>"']/g,
@@ -52,16 +53,20 @@ export async function renderPage() {
     /<title>[\s\S]*?<\/title>/,
     () => `<title>${escape(settings.seo.title)}</title>`,
   );
+  const socialImage = imageMetadata(settings.seo.ogImage);
+  const favicon = imageMetadata(settings.faviconUrl);
+  html = html.replace(/<link id="portfolio-favicon"[^>]*>/, () =>
+    `<link id="portfolio-favicon" rel="icon" href="${escape(favicon.url)}"${favicon.type ? ` type="${favicon.type}"` : ""}${favicon.width ? ` sizes="${favicon.width}x${favicon.height}"` : ""} />`);
   const meta: Record<string, string> = {
     description: settings.seo.description,
     keywords: settings.seo.keywords,
     "og:title": settings.seo.title,
     "og:description": settings.seo.description,
-    "og:image": settings.seo.ogImage,
-    "og:image:secure_url": settings.seo.ogImage,
+    "og:image": socialImage.url,
+    "og:image:secure_url": socialImage.url,
     "twitter:title": settings.seo.title,
     "twitter:description": settings.seo.description,
-    "twitter:image": settings.seo.ogImage,
+    "twitter:image": socialImage.url,
   };
   for (const [name, value] of Object.entries(meta))
     html = html.replace(
@@ -70,6 +75,14 @@ export async function renderPage() {
       ),
       `$1${escape(value).replace(/\$/g, "$$$$")}$2`,
     );
+  for (const [name, value] of Object.entries({
+    "og:image:type": socialImage.type,
+    "og:image:width": socialImage.width,
+    "og:image:height": socialImage.height,
+  })) {
+    html = html.replace(new RegExp(`<meta property="${name}"[^>]*>`, "g"),
+      () => value === undefined ? "" : `<meta property="${name}" content="${escape(String(value))}" />`);
+  }
   const schema = {
     "@context": "https://schema.org",
     "@graph": [
@@ -77,7 +90,7 @@ export async function renderPage() {
         "@type": "Person",
         "@id": "https://akaa.dev/#person",
         name: "Abdul Khaliq Arrasyid",
-        alternateName: [settings.name, "aka", "akaanakbaik"],
+        alternateName: Array.from(new Set([settings.name, "aka", "akaanakbaik"])),
         url: "https://akaa.dev/",
         description: settings.seo.description,
         image: new URL(settings.photoUrl, "https://akaa.dev").href,

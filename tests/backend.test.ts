@@ -340,3 +340,18 @@ test('database failure never reports contact success and homepage stays readable
 test('language statistics remain available without source files in the deployment',async()=>{
  const token=await login();assert.equal((await request('/api/analytics/lang-stats')).status,401);const r=await request('/api/analytics/lang-stats','GET',undefined,token);assert.equal(r.status,200);const stats=await r.json();assert.ok(stats.length>0);assert.ok(stats.every((x:any)=>x.lines>0&&x.percentage>=0&&x.percentage<=100));
 });
+
+
+test("published image and favicon metadata match without JavaScript or stale dimensions", async () => {
+  state.settings = { ...defaultSettings, faviconUrl: "/favicon.svg?rev=custom", seo: { ...defaultSettings.seo, ogImage: "/uploads/custom.png?rev=2" } };
+  const html = await (await request("/")).text();
+  assert.match(html, /id="portfolio-favicon" rel="icon" href="https:\/\/akaa.dev\/favicon.svg\?rev=custom" type="image\/svg\+xml"/);
+  assert.match(html, /property="og:image" content="https:\/\/akaa.dev\/uploads\/custom.png\?rev=2"/);
+  assert.match(html, /property="og:image:secure_url" content="https:\/\/akaa.dev\/uploads\/custom.png\?rev=2"/);
+  assert.match(html, /property="og:image:type" content="image\/png"/);
+  assert.ok(!html.includes('property="og:image:width"'));
+  assert.ok(!html.includes('property="og:image:height"'));
+  const schema = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]);
+  const aliases = schema["@graph"][0].alternateName;
+  assert.equal(aliases.length, new Set(aliases).size);
+});

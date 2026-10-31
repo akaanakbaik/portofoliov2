@@ -1,3 +1,4 @@
+import { imageMetadata } from "../../../shared/seo";
 import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
@@ -43,11 +44,19 @@ export default function Portfolio() {
     setMeta("meta[name='keywords']", seo?.keywords || "");
     setMeta("meta[property='og:title']", seo?.title || "");
     setMeta("meta[property='og:description']", seo?.description || "");
-    setMeta("meta[property='og:image']", seo?.ogImage || settings.photoUrl || "");
+    const image = imageMetadata(seo?.ogImage || settings.photoUrl);
+    setMeta("meta[property='og:image']", image.url);
+    setMeta("meta[property='og:image:secure_url']", image.url);
+    for (const [name, value] of Object.entries({ "og:image:type": image.type, "og:image:width": image.width, "og:image:height": image.height })) {
+      let meta = document.querySelector<HTMLMetaElement>(`meta[property='${name}']`);
+      if (value === undefined) { meta?.remove(); continue; }
+      if (!meta) { meta = document.createElement("meta"); meta.setAttribute("property", name); document.head.appendChild(meta); }
+      meta.content = String(value);
+    }
     setMeta("meta[property='og:url']", seo?.canonical || window.location.origin);
     setMeta("meta[name='twitter:title']", seo?.title || "");
     setMeta("meta[name='twitter:description']", seo?.description || "");
-    setMeta("meta[name='twitter:image']", seo?.ogImage || settings.photoUrl || "");
+    setMeta("meta[name='twitter:image']", image.url);
     let canonical = document.querySelector<HTMLLinkElement>("link[rel='canonical']");
     if (!canonical) { canonical = document.createElement("link"); canonical.rel = "canonical"; document.head.appendChild(canonical); }
     canonical.href = seo?.canonical || window.location.origin;

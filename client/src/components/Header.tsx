@@ -108,7 +108,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             onClick={handleLangToggle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent/40 hover:bg-accent/80 border border-border/50 transition-all duration-200"
             whileTap={{ scale: 0.92 }}
-            aria-label={lang === "id" ? "Ganti bahasa" : "Change language"}
+            aria-label={lang === "id" ? "ID — Ganti bahasa ke Inggris" : "EN — Change language to Indonesian"}
           >
             <AnimatePresence mode="wait">
               <motion.div

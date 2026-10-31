@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, useInView, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useLang } from "@/lib/LangContext";
 import { usePortfolio } from "@/lib/PortfolioContext";
 
@@ -7,6 +7,8 @@ export default function HomeSection() {
   const { lang } = useLang();
   const { settings } = usePortfolio();
   const shouldReduceMotion = useReducedMotion();
+  const heroRef = useRef<HTMLElement>(null);
+  const heroVisible = useInView(heroRef);
   const { scrollYProgress } = useScroll();
   const parallaxIntensity = Math.min(Math.max(settings.motion?.parallaxIntensity ?? 0.35, 0), 0.75);
   const parallaxEnabled = settings.motion?.parallaxEnabled !== false && !shouldReduceMotion;
@@ -28,7 +30,7 @@ export default function HomeSection() {
     const speed = isDeleting ? 50 : 85;
     if (!isDeleting && displayText === current) {
       timeoutRef.current = setTimeout(() => setIsDeleting(true), 2200);
-      return;
+      return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
     }
     if (isDeleting && displayText === "") {
       setIsDeleting(false);
@@ -47,6 +49,7 @@ export default function HomeSection() {
 
   return (
     <section
+      ref={heroRef}
       id="home"
       className="flex items-center justify-center relative overflow-hidden scroll-mt-20"
       style={{ minHeight: "calc(100vh - 3.5rem)", marginTop: "3.5rem" }}
@@ -54,13 +57,13 @@ export default function HomeSection() {
       <motion.div className="absolute inset-0 pointer-events-none" aria-hidden="true" style={{ y: parallaxEnabled ? glowY : 0 }}>
         {!shouldReduceMotion && <>
           <motion.div
-            animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] }}
+            animate={heroVisible ? { scale: [1, 1.2, 1], opacity: [0.05, 0.12, 0.05] } : { scale: 1, opacity: 0.05 }}
             transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
             className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] rounded-full"
             style={{ background: "radial-gradient(circle, hsl(217 91% 60% / 0.4), transparent 70%)", filter: "blur(80px)", willChange: "transform, opacity" }}
           />
           <motion.div
-            animate={{ scale: [1, 1.1, 1], opacity: [0.04, 0.08, 0.04] }}
+            animate={heroVisible ? { scale: [1, 1.1, 1], opacity: [0.04, 0.08, 0.04] } : { scale: 1, opacity: 0.04 }}
             transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 3 }}
             className="absolute bottom-1/4 -right-1/4 w-[500px] h-[500px] rounded-full"
             style={{ background: "radial-gradient(circle, hsl(250 70% 65% / 0.3), transparent 70%)", filter: "blur(70px)", willChange: "transform, opacity" }}
@@ -70,7 +73,7 @@ export default function HomeSection() {
 
       <motion.div className="relative z-10 text-center px-4 max-w-2xl mx-auto py-16" style={{ y: parallaxEnabled ? contentY : 0, opacity: parallaxEnabled ? heroOpacity : 1 }}>
         <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.7, y: 30 }}
+          initial={false}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
           className="relative inline-block mb-6"
@@ -94,7 +97,7 @@ export default function HomeSection() {
         </motion.div>
 
         <motion.h1
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           data-testid="profile-name"
@@ -105,7 +108,7 @@ export default function HomeSection() {
         </motion.h1>
 
         <motion.p
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.42, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="max-w-xl mx-auto text-base md:text-lg leading-relaxed text-muted-foreground"
@@ -114,7 +117,7 @@ export default function HomeSection() {
         </motion.p>
 
         <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.54, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="flex items-center justify-center gap-3 mt-7 flex-wrap"
